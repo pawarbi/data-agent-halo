@@ -183,8 +183,40 @@ def _token_from_session(request: Request) -> Optional[str]:
 # --------------------------------------------------------------------------- #
 # Run the graph, stream real trace events over SSE
 # --------------------------------------------------------------------------- #
+_models_cache: dict = {"at": 0.0, "items": []}
+
+
+@app.get("/api/models")
+def api_models():
+    """Models the configured endpoint offers, free ones first.
+
+    Only OpenRouter publishes a catalogue we can read without credentials; for any
+    other endpoint the UI just lets you type an id.
+    """
+    if "openrouter.ai" not in core.LLM_BASE_URL:
+        return {"current": core.MODEL, "models": [], "note": "type any model id"}
+    if time.time() - _models_cache["at"] < 900 and _models_cache["items"]:
+        return {"current": core.MODEL, "models": _models_cache["items"]}
+    try:
+        import requests
+        r = requests.get(f"{core.LLM_BASE_URL}/models", timeout=20)
+        r.raise_for_status()
+        items = []
+        for m in r.json().get("data", []):
+            mid = m.get("id", "")
+            pricing = m.get("pricing") or {}
+            free = mid.endswith(":free") or str(pricing.get("prompt", "0")) in ("0", "0.0")
+            items.append({"id": mid, "name": m.get("name") or mid, "free": free})
+        # Free first, then alphabetical, so the zero-cost options are reachable.
+        items.sort(key=lambda m: (not m["free"], m["id"]))
+        _models_cache.update(at=time.time(), items=items)
+        return {"current": core.MODEL, "models": items}
+    except Exception as e:
+        return {"current": core.MODEL, "models": [], "error": core.describe_error(e)}
+
+
 @app.get("/api/ask")
-async def api_ask(request: Request, q: str, thread: str = "web"):
+async def api_ask(request: Request, q: str, thread: str = "web", model: str = ""):
     token = _token_from_session(request)
     if not token:
         return JSONResponse({"error": "not_signed_in"}, status_code=401)
@@ -195,6 +227,8 @@ async def api_ask(request: Request, q: str, thread: str = "web"):
         # running. Without the second, the UI sits silent for the 30-90s a data
         # agent takes to answer.
         state_in = {"question": q, "user_token": token, "attempts": 0}
+        if model:
+            state_in["model"] = model
         config = {"configurable": {"thread_id": thread}}
         last_answer = ""
         t_start = time.perf_counter()
@@ -285,7 +319,8 @@ async def api_ask(request: Request, q: str, thread: str = "web"):
 def me(request: Request):
     return {"who": request.session.get("who"),
             "signed_in": request.session.get("sid", "") in _caches,
-            "agents": {k: v["description"] for k, v in core.AGENTS.items()}}
+            "agents": {k: v["description"] for k, v in core.AGENTS.items()},
+            "examples": core.EXAMPLES}
 
 
 # --------------------------------------------------------------------------- #

@@ -60,7 +60,8 @@ def main() -> None:
     @server.app.get("/api/me")
     def me():
         return {"who": "alice@contoso.com (local dev)", "signed_in": True,
-                "agents": {k: v["description"] for k, v in core.AGENTS.items()}}
+                "agents": {k: v["description"] for k, v in core.AGENTS.items()},
+                "examples": core.EXAMPLES}
 
     print(f"\nHALO (local dev) on http://127.0.0.1:{PORT}\n")
     import uvicorn

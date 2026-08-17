@@ -3,6 +3,9 @@ venv/
 __pycache__/
 *.pyc
 .env
+# Your own agent catalogue. Ship agents.example.json instead; keep your GUIDs out
+# of the repo and put them in HALO_AGENTS when hosting.
+agents.json
 or.txt
 *.key
 secrets*

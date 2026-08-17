@@ -117,7 +117,7 @@ def _to_mock(url: str, **kw):
 _judged = {"n": 0}
 
 
-def fake_llm(system: str, user: str, temperature: float = 0.0) -> str:
+def fake_llm(system: str, user: str, temperature: float = 0.0, model=None) -> str:
     """Deterministic stand-in for the model: 'compare' fans out, 'downtime' retries once."""
     if "route a question" in system:
         q = user.lower()
@@ -216,7 +216,7 @@ def test_out_of_scope() -> None:
     core.call_data_agent = counting_call
     saved = core.llm
     # A working model that correctly answers "none of these".
-    core.llm = lambda s, u, temperature=0.0: "[]" if "route a question" in s else '{"verdict":"pass"}'
+    core.llm = lambda s, u, temperature=0.0, model=None: "[]" if "route a question" in s else '{"verdict":"pass"}'
     try:
         st = run_graph("hi", "t-oos")
         check("no agent was called", calls == [], str(calls))
@@ -229,6 +229,54 @@ def test_out_of_scope() -> None:
     finally:
         core.llm = saved
         core.call_data_agent = real_call
+
+
+def test_config_and_model_override() -> None:
+    """Agents come from config, and a per-run model choice reaches the model call."""
+    print("\n[6] configuration")
+    agents, examples = core.load_agents(json.dumps({
+        "examples": ["one", "two"],
+        "agents": {"demo": {
+            "url": "https://api.fabric.microsoft.com/v1/mcp/workspaces/"
+                   "00000000-0000-0000-0000-000000000000/dataagents/"
+                   "11111111-1111-1111-1111-111111111111/agent",
+            "description": "A demo domain.", "excludes": "Nothing else."}}}))
+    check("agents load from JSON", list(agents) == ["demo"], str(list(agents)))
+    check("the URL is parsed into GUIDs",
+          agents["demo"]["workspace_id"] == "00000000-0000-0000-0000-000000000000")
+    check("examples load from the same file", examples == ["one", "two"], str(examples))
+
+    for bad, why in (({"agents": {}}, "no agents"),
+                     ({"agents": {"x": {"url": "nonsense", "description": "d"}}}, "bad url"),
+                     ({"agents": {"x": {"url": "https://h/v1/mcp/workspaces/"
+                                        "00000000-0000-0000-0000-000000000000/dataagents/"
+                                        "11111111-1111-1111-1111-111111111111/agent"}}},
+                      "no description")):
+        try:
+            core.load_agents(json.dumps(bad))
+            check(f"rejects config with {why}", False, "no error raised")
+        except Exception:
+            check(f"rejects config with {why}", True)
+
+    # The chosen model must reach the HTTP call, not just sit in state.
+    seen = {}
+    saved = core.llm
+
+    def spy(system, user, temperature=0.0, model=None):
+        seen.setdefault("model", model)
+        return json.dumps([FIRST]) if "route a question" in system else '{"verdict":"pass"}'
+
+    core.llm = spy
+    try:
+        graph = core.build_graph()
+        asyncio.run(graph.ainvoke(
+            {"question": "anything", "user_token": TOKEN, "attempts": 0,
+             "model": "some/other-model"},
+            {"configurable": {"thread_id": "t-model"}}))
+        check("a per-run model choice reaches the model call",
+              seen.get("model") == "some/other-model", str(seen))
+    finally:
+        core.llm = saved
 
 
 def test_keyword_routing() -> None:
@@ -472,6 +520,7 @@ def main() -> None:
     test_parallel()
     test_retry()
     test_out_of_scope()
+    test_config_and_model_override()
     test_keyword_routing()
     test_auth_guard()
     test_sse()

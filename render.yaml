@@ -20,13 +20,9 @@ services:
         value: nvidia/nemotron-3-ultra-550b-a55b:free
       - key: HALO_SESSION_SECRET
         generateValue: true
-      # One URL per agent — paste the whole MCP endpoint Fabric shows you.
-      # Optional: halo_core.py already has these baked in as defaults.
-      - key: CLOUDMETRICS_URL
-        sync: false
-      - key: MANUFACTURING_URL
-        sync: false
-      - key: ECOMMERCE_URL
+      # Your agent catalogue as JSON: the contents of agents.json. Keeping it in
+      # an env var rather than the repo means your workspace GUIDs are not committed.
+      - key: HALO_AGENTS
         sync: false
       # A data agent doing NL->SQL can take a while; the default 300s is usually right.
       - key: HALO_AGENT_TIMEOUT

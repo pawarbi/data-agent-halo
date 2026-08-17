@@ -143,76 +143,57 @@ def agent(url: str, description: str, excludes: str = "") -> dict:
             "description": description, "excludes": excludes}
 
 
-# The classifier routes on `description` alone, so these are load-bearing. Two
+def load_agents(source: Optional[str] = None) -> tuple[dict[str, dict], list[str]]:
+    """Read the agent catalogue. Returns (agents, example questions).
+
+    Looked for in this order, first hit wins:
+      1. HALO_AGENTS         the JSON itself, for hosts where a file is awkward
+      2. HALO_AGENTS_FILE    a path
+      3. agents.json         beside this file
+      4. agents.example.json the shipped placeholders
+
+    Shape:
+      {"examples": ["..."],
+       "agents": {"key": {"url": "...", "description": "...", "excludes": "..."}}}
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    raw = source or os.environ.get("HALO_AGENTS", "").strip()
+    if not raw:
+        for path in (os.environ.get("HALO_AGENTS_FILE", ""),
+                     os.path.join(here, "agents.json"),
+                     os.path.join(here, "agents.example.json")):
+            if path and os.path.exists(path):
+                with open(path, encoding="utf-8") as f:
+                    raw = f.read()
+                break
+    if not raw:
+        raise RuntimeError("no agent configuration found; copy agents.example.json to agents.json")
+
+    cfg = json.loads(raw)
+    entries = cfg.get("agents") or {}
+    if not entries:
+        raise RuntimeError("agent configuration has no 'agents'")
+    built = {}
+    for key, spec in entries.items():
+        if not spec.get("description"):
+            raise RuntimeError(f"agent {key!r} has no description; the classifier routes on it")
+        built[key] = agent(spec["url"], spec["description"], spec.get("excludes", ""))
+    return built, list(cfg.get("examples") or [])
+
+
+# The classifier routes on `description` alone, so those are load-bearing. Two
 # rules, both learned the hard way:
 #
-#   1. Make them disjoint. "revenue" means subscription revenue to one of these
-#      agents and physical product revenue to the other, so say which.
+#   1. Make them disjoint. "revenue" means subscription revenue to one agent and
+#      physical product revenue to another, so say which.
 #   2. Name the concrete nouns, not the abstractions. When no model is reachable,
 #      `classify` falls back to stem overlap against this text, so the specific
 #      terms a user would actually type are what make routing work.
 #
-# These were written from `python probe_agents.py` output, not guessed. Rerun it
-# after changing an agent in Fabric.
-AGENTS: dict[str, dict] = {
-    "cloudmetrics": agent(
-        os.environ.get(
-            "CLOUDMETRICS_URL",
-            "https://api.fabric.microsoft.com/v1/mcp/workspaces/"
-            "00000000-0000-0000-0000-000000000000/dataagents/"
-            "11111111-1111-1111-1111-111111111111/agent",
-        ),
-        "CloudMetrics B2B SaaS platform. Subscriptions and plans (starter, professional, "
-        "business, enterprise), seats and users, companies, accounts and clients, MRR, "
-        "ARR, NRR, churn and retention, invoices, billed and collected amounts, and "
-        "support tickets including time to first response and mean time to resolution. "
-        "This is the source for recurring software revenue. Data covers 2021-07 to "
-        "2025-02; the latest complete month is 2024-12.",
-        excludes="Anything on a factory floor, and any revenue from physical goods. "
-                 "No plants, lines, machines, OEE, scrap, yield, downtime or inventory.",
-    ),
-    "manufacturing": agent(
-        os.environ.get(
-            "MANUFACTURING_URL",
-            "https://api.fabric.microsoft.com/v1/mcp/workspaces/"
-            "22222222-2222-2222-2222-222222222222/dataagents/"
-            "33333333-3333-3333-3333-333333333333/agent",
-        ),
-        "Manufacturing operations. Plants, manufacturing lines, and machinery and assets "
-        "including pumps, turbines and motors. Production quantity, OEE, scrap rate, "
-        "production yield, downtime minutes and downtime reasons or root causes, and "
-        "inventory. Also physical product sales: units sold, sales revenue, cost and "
-        "margin from the OpsRefData lakehouse. Note that the word turbomachinery here "
-        "means pumps and turbines specifically, while motors are covered as ordinary "
-        "assets. Defaults to the latest 30 days when no period is given.",
-        # Deliberately says nothing about motors. Phrasing the turbomachinery
-        # definition as "never includes Motors" read to the classifier as "holds no
-        # motor data", so "which motors had the most downtime?" was refused outright
-        # rather than routed here. A definition is not a scope exclusion.
-        excludes="No customer-level data, no vendors, purchasing or purchase orders, no "
-                 "employees, and nothing about software subscriptions, seats or support "
-                 "tickets.",
-    ),
-    "ecommerce": agent(
-        os.environ.get(
-            "ECOMMERCE_URL",
-            "https://api.fabric.microsoft.com/v1/mcp/workspaces/"
-            "44444444-4444-4444-4444-444444444444/dataagents/"
-            "55555555-5555-5555-5555-555555555555/agent",
-        ),
-        "Brazilian online marketplace, the Olist dataset. Orders and order line items, "
-        "marketplace sellers, online shoppers, catalogue products and categories, "
-        "freight and delivery, and buyer geography by Brazilian state and ZIP code. "
-        "This is the source for e-commerce and online retail orders. Sales here are at "
-        "line-item grain, so an order spans several rows.",
-        excludes="Nothing about software subscriptions, seats, MRR or support tickets, "
-                 "and nothing from the factory: no plants, lines, OEE, scrap, yield, "
-                 "downtime or production. Not SAP product sales either.",
-    ),
-    # Add more the same way — the UI lays out however many there are:
-    # "finance": agent(os.environ.get("FINANCE_URL", "https://…/agent"),
-    #                  "Budgets, GL accounts, cost centres, financial close."),
-}
+# Write them from `python probe_agents.py` output rather than guessing, and rerun
+# it after changing an agent in Fabric. See README.md for the full guidance.
+AGENTS, EXAMPLES = load_agents()
+
 
 # Model used for classify / synthesize / validate. Any OpenAI-compatible endpoint
 # works, so this is not tied to OpenRouter:
@@ -254,6 +235,7 @@ def merge_results(old: list[dict] | None, new: list[dict] | None) -> list[dict]:
 
 class HaloState(TypedDict, total=False):
     question: str
+    model: str                             # per-run model override
     user_token: str                       # the signed-in user's Fabric token
     route: list[str]                       # which agent keys to call
     results: Annotated[list[dict], merge_results]   # [{agent, answer}] — parallel-safe
@@ -273,7 +255,8 @@ class HaloState(TypedDict, total=False):
 llm_status: dict[str, str] = {"reason": ""}
 
 
-def llm(system: str, user: str, temperature: float = 0.0) -> str:
+def llm(system: str, user: str, temperature: float = 0.0,
+        model: Optional[str] = None) -> str:
     """Ask the model. Returns "" on any failure rather than raising.
 
     Every caller already has a non-model path: classify falls back to keyword
@@ -293,7 +276,7 @@ def llm(system: str, user: str, temperature: float = 0.0) -> str:
             f"{LLM_BASE_URL}/chat/completions",
             headers=headers,
             json={
-                "model": MODEL,
+                "model": model or MODEL,
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}],
                 "temperature": temperature,
@@ -304,19 +287,19 @@ def llm(system: str, user: str, temperature: float = 0.0) -> str:
             llm_status["reason"] = f"{LLM_BASE_URL} rejected the key (401) — the API key is invalid or expired"
             return ""
         if r.status_code == 402:
-            llm_status["reason"] = f"out of credit (402) for model {MODEL}"
+            llm_status["reason"] = f"out of credit (402) for model {model or MODEL}"
             return ""
         if r.status_code == 404:
-            llm_status["reason"] = f"{LLM_BASE_URL} does not know model {MODEL!r} (404) — check HALO_MODEL"
+            llm_status["reason"] = f"{LLM_BASE_URL} does not know model {(model or MODEL)!r} (404)"
             return ""
         if r.status_code == 429:
-            llm_status["reason"] = f"rate-limited on model {MODEL} (429)"
+            llm_status["reason"] = f"rate-limited on model {model or MODEL} (429)"
             return ""
         r.raise_for_status()
         body = r.json()
         content = body["choices"][0]["message"]["content"].strip()
         usage = body.get("usage") or {}
-        emit(ev="llm", model=MODEL,
+        emit(ev="llm", model=model or MODEL,
              prompt_tokens=usage.get("prompt_tokens", 0),
              completion_tokens=usage.get("completion_tokens", 0))
         llm_status["reason"] = "" if content else "model returned an empty message"
@@ -512,7 +495,7 @@ def classify(state: HaloState) -> dict:
         "Reply with ONLY a JSON array of agent keys from this list, nothing else."
         "\n\n" + catalog
     )
-    raw = llm(sys, state["question"])
+    raw = llm(sys, state["question"], model=state.get("model"))
     route: list[str] = []
     how = "model"
     try:
@@ -613,7 +596,8 @@ def synthesize(state: HaloState) -> dict:
                "These figures come from separate systems. Report them side by side; do "
                "not compute ratios or totals across domains, and do not imply a "
                "row-level join that did not happen.")
-        answer = llm(sys, f"Question: {state['question']}\n\nResults:\n{blocks}") or blocks
+        answer = llm(sys, f"Question: {state['question']}\n\nResults:\n{blocks}",
+                     model=state.get("model")) or blocks
     return {"answer": answer, "trace": [f"synthesize → merged {len(state['results'])} result(s)"]}
 
 
@@ -639,7 +623,8 @@ def validate(state: HaloState) -> dict:
         'Reply ONLY as JSON: {"verdict":"pass"} or '
         '{"verdict":"retry","critique":"<what to fix>"}.'
     )
-    raw = llm(sys, f"Question: {state['question']}\n\nAnswer: {state['answer']}")
+    raw = llm(sys, f"Question: {state['question']}\n\nAnswer: {state['answer']}",
+              model=state.get("model"))
     verdict, critique = "pass", ""
     try:
         obj = json.loads(re.search(r"\{.*\}", raw, re.S).group())
