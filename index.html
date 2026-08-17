@@ -60,6 +60,18 @@
   .stats{ display:flex; gap:16px; align-items:center; font-family:'Cascadia Code',monospace;
     font-size:11px; color:var(--dim); margin:2px 0 2px; min-height:16px; }
   .stats b{ color:var(--teal); font-weight:500; } .stats .sep{ color:var(--line); }
+  /* Where the wall time actually went. Built from the per-node timings. */
+  .lat{ display:none; margin:2px 0 4px; }
+  .lat.show{ display:block; }
+  .lat .track{ display:flex; height:16px; border-radius:5px; overflow:hidden;
+    border:1px solid var(--line); background:var(--panel); }
+  .lat .seg{ height:100%; position:relative; transition:width .25s ease;
+    font-family:'Cascadia Code',monospace; font-size:9px; line-height:16px;
+    text-align:center; color:#06120f; white-space:nowrap; overflow:hidden; }
+  .lat .key{ display:flex; gap:14px; flex-wrap:wrap; margin-top:4px;
+    font-family:'Cascadia Code',monospace; font-size:10px; color:var(--dim); }
+  .lat .key i{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; }
+  .lat .key b{ color:var(--muted); font-weight:500; }
   .main{ flex:1; display:grid; grid-template-columns:1.15fr 1fr; gap:14px; margin-top:6px; min-height:0; }
   .stage{ position:relative; border:1px solid var(--line); border-radius:14px; background:var(--panel2); overflow:hidden; }
   svg{ position:absolute; inset:0; width:100%; height:100%; }
@@ -74,6 +86,12 @@
   .entry .ms{ float:right; color:var(--dim); font-size:10.5px; }
   .entry .body{ color:var(--text); margin-top:4px; line-height:1.5; white-space:pre-wrap; }
   .entry .agent{ color:var(--blue); }
+  .entry .sent{ color:var(--dim); cursor:pointer; font-size:10.5px; margin-left:4px; }
+  .entry .sent:hover{ color:var(--teal); }
+  .entry .askbox{ display:none; margin:5px 0 6px; padding:8px 10px; background:var(--panel);
+    border:1px solid var(--line); border-radius:7px; color:var(--muted); font-size:11px;
+    white-space:pre-wrap; max-height:190px; overflow-y:auto; }
+  .entry .askbox.open{ display:block; }
   .dots::after{ content:'·'; animation:dots 1.2s steps(4,end) infinite; color:var(--teal); }
   @keyframes dots{ 0%{content:'·'} 25%{content:'··'} 50%{content:'···'} 75%{content:'····'} }
   .final{ padding:12px 14px; border-top:1px solid var(--line); font-family:'Segoe UI',sans-serif;
@@ -147,6 +165,7 @@
     <button class="btn ghost" id="clear" title="Clear the trace, and stop a running query">Clear</button>
   </div>
   <div class="stats" id="stats"></div>
+  <div class="lat" id="lat"></div>
   <div class="main">
     <div class="stage">
       <svg id="svg" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
@@ -388,7 +407,8 @@ function md(src){
 
 function reset(){draw(); for(const k in N){setNode(k,"idle");setNodeMs(k,0);}
   logEl.innerHTML=""; finalEl.className="final"; finalEl.innerHTML="";
-  route=[]; tokens=0; llmCalls=0; agentMs={}; fanoutNote=""; renderStats(); }
+  route=[]; tokens=0; llmCalls=0; agentMs={}; fanoutNote="";
+  buckets={classify:0,fan_out:0,synthesize:0,validate:0}; renderLatency(); renderStats(); }
 
 function addTrace(cls,node,body,id){const e=document.createElement("div");e.className="entry "+(cls||"");
   if(id) e.id="tr_"+id;
@@ -400,6 +420,33 @@ function setTraceBody(id,html){const e=document.getElementById("tr_"+id); if(e) 
 function setTraceMs(id,ms){const e=document.getElementById("ms_"+id); if(e) e.textContent=fmt(ms);}
 function activate(nodeKeys,retry){ nodeKeys.forEach(k=>setNode(k,retry?"retry":"active")); }
 
+// Where the wall time went. node_end already carries each node's own ms, so this
+// is just bookkeeping: whatever is left over after the four nodes is orchestration
+// overhead, which is worth seeing rather than hiding.
+let buckets={classify:0,fan_out:0,synthesize:0,validate:0};
+const LAT={classify:["classify","var(--blue)"],fan_out:["data agents","var(--teal)"],
+           synthesize:["synthesize","var(--green)"],validate:["validate","var(--salmon)"]};
+function renderLatency(){
+  const el=document.getElementById("lat");
+  const known=Object.values(buckets).reduce((a,b)=>a+b,0);
+  if(!known){ el.className="lat"; el.innerHTML=""; return; }
+  const total=Math.max(known, run0?Date.now()-run0:known);
+  const parts=Object.keys(buckets).filter(k=>buckets[k]>0)
+    .map(k=>({name:LAT[k][0], color:LAT[k][1], ms:buckets[k], dark:true}));
+  const other=Math.max(0,total-known);
+  if(other>total*0.01) parts.push({name:"overhead", color:"var(--idle)", ms:other, dark:false});
+  const pct=p=>p.ms/total*100;
+  el.className="lat show";
+  el.innerHTML='<div class="track">'
+    + parts.map(p=>'<div class="seg" style="width:'+pct(p).toFixed(2)+'%;background:'+p.color
+        +';color:'+(p.dark?"#06120f":"var(--muted)")+'" title="'+esc(p.name)+": "+fmt(p.ms)
+        +" ("+pct(p).toFixed(1)+'%)">'+(pct(p)>=11?Math.round(pct(p))+"%":"")+'</div>').join("")
+    + '</div><div class="key">'
+    + parts.map(p=>'<span><i style="background:'+p.color+'"></i>'+esc(p.name)
+        +' <b>'+fmt(p.ms)+'</b> '+pct(p).toFixed(0)+'%</span>').join("")
+    + '</div>';
+}
+
 function renderStats(){
   const parts=[];
   if(run0) parts.push("<b>"+fmt(Date.now()-run0)+"</b> elapsed");
@@ -410,7 +457,8 @@ function renderStats(){
 }
 function startClock(){ run0=Date.now(); clearInterval(ticker);
   ticker=setInterval(()=>{ clockEl.textContent=fmt(Date.now()-run0); renderStats(); },100); }
-function stopClock(){ clearInterval(ticker); ticker=null; if(run0) clockEl.textContent=fmt(Date.now()-run0); renderStats(); }
+function stopClock(){ clearInterval(ticker); ticker=null;
+  if(run0) clockEl.textContent=fmt(Date.now()-run0); renderStats(); renderLatency(); }
 
 // ---- progress events emitted from inside the graph ----
 function handleProgress(d){
@@ -421,9 +469,10 @@ function handleProgress(d){
     else if(d.node!=="gate") addTrace("",d.node,'<span class="dots" style="color:var(--muted)">working</span>',d.node);
   }
   else if(d.ev==="node_end"){ setTraceMs(d.node==="fan_out"?"fanout":d.node, d.ms);
+    if(d.node in buckets){ buckets[d.node]+=d.ms; renderLatency(); }
     const vis={classify:"classify",synthesize:"synth",validate:"validate"}[d.node]; if(vis) setNodeMs(vis,d.ms); }
   else if(d.ev==="agent_start"){ setNode(vkey(d.agent),"active"); setEdge("classify>"+vkey(d.agent),"active");
-    agentMs[d.agent]=null; appendAgentRow(d.agent,'<span class="dots">querying Fabric</span>'); renderStats(); }
+    agentMs[d.agent]=null; appendAgentRow(d.agent,'<span class="dots">querying Fabric</span>', d.ask); renderStats(); }
   else if(d.ev==="agent_end"){ setNode(vkey(d.agent),d.failed?"retry":"done"); setNodeMs(vkey(d.agent),d.ms);
     setEdge(vkey(d.agent)+">synth","active"); agentMs[d.agent]=d.ms;
     updateAgentRow(d.agent,(d.failed?'<span style="color:var(--salmon)">failed</span> ':"")+esc(d.preview||""),d.ms); renderStats(); }
@@ -432,12 +481,19 @@ function handleProgress(d){
     renderStats(); }
   else if(d.ev==="llm"){ llmCalls++; tokens += (d.prompt_tokens||0)+(d.completion_tokens||0); renderStats(); }
 }
-function appendAgentRow(agent,html){
+function appendAgentRow(agent,html,ask){
   const e=document.getElementById("tr_fanout"); if(!e) return;
   const b=e.querySelector(".body");
   if(b.dataset.init!=="1"){ b.innerHTML=""; b.dataset.init="1"; }
   const row=document.createElement("div"); row.id="ag_"+agent;
-  row.innerHTML='<span class="agent">'+esc(agent)+':</span> <span class="st">'+html+'</span>';
+  // The exact text this agent was sent. On a retry it carries the judge's
+  // critique, and on a fan-out the scoping preamble, so being able to read it is
+  // the difference between believing the loop works and seeing that it does.
+  const sent = ask ? '<span class="sent" title="what this agent was actually sent">sent ▸</span>'
+                     + '<pre class="askbox">'+esc(ask)+'</pre>' : "";
+  row.innerHTML='<span class="agent">'+esc(agent)+':</span> '+sent+' <span class="st">'+html+'</span>';
+  if(ask){ const t=row.querySelector(".sent"), box=row.querySelector(".askbox");
+    t.onclick=()=>{ const open=box.classList.toggle("open"); t.textContent=open?"sent ▾":"sent ▸"; }; }
   b.appendChild(row);
 }
 function updateAgentRow(agent,html,ms){

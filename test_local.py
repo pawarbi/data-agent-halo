@@ -521,6 +521,9 @@ def test_sse() -> None:
     fan = [p for p in prog if p["ev"] == "fanout_done"]
     check("fan-out reports wall vs serial time",
           bool(fan) and {"wall_ms", "serial_ms", "agents"} <= set(fan[0]), str(fan))
+    starts = [p for p in prog if p["ev"] == "agent_start"]
+    check("each agent reports the text it was sent",
+          all(p.get("ask") for p in starts), str(starts))
 
     ev = ask("show me downtime", "sse-b")
     nodes, prog = split(ev)

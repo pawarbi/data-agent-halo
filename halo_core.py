@@ -558,7 +558,10 @@ async def fan_out(state: HaloState) -> dict:
     async def one(key: str) -> dict:
         cfg = AGENTS[key]
         ask = f"{q}{scope}" if fanning_out else q
-        emit(ev="agent_start", agent=key)
+        # Send the exact text along, so the UI can show what this agent was really
+        # asked: the scoping preamble on a fan-out, and the judge's critique on a
+        # retry. Otherwise both are claims nobody can check.
+        emit(ev="agent_start", agent=key, ask=ask)
         t0 = time.perf_counter()
         failed = False
         try:
