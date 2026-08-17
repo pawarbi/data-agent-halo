@@ -31,6 +31,30 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse,
 from starlette.middleware.sessions import SessionMiddleware
 from msal import ConfidentialClientApplication, SerializableTokenCache
 
+
+def _load_dotenv() -> None:
+    """Read a .env next to this file, if there is one. The real environment wins.
+
+    That precedence is the opposite of run_local.py's, deliberately: on a host
+    the platform's own environment must never be overridden by a file that
+    happened to get deployed.
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if key and key not in os.environ:
+                os.environ[key] = value.strip().strip("'\"")
+
+
+_load_dotenv()             # before the config below and before halo_core reads env
+
 import halo_core as core   # the graph + agents (refactored from halo.py)
 
 # --------------------------------------------------------------------------- #
