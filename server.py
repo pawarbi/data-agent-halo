@@ -204,6 +204,13 @@ def api_models():
         items = []
         for m in r.json().get("data", []):
             mid = m.get("id", "")
+            arch = m.get("architecture") or {}
+            out = arch.get("output_modalities") or ["text"]
+            # Not everything in the catalogue can serve /chat/completions:
+            #   :batch  goes to OpenRouter's batch API and 404s here
+            #   image or audio output models are generators, not chat models
+            if mid.endswith(":batch") or out != ["text"]:
+                continue
             pricing = m.get("pricing") or {}
             free = mid.endswith(":free") or str(pricing.get("prompt", "0")) in ("0", "0.0")
             items.append({"id": mid, "name": m.get("name") or mid, "free": free})
