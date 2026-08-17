@@ -499,7 +499,11 @@ def classify(state: HaloState) -> dict:
         "question needs, and only those. If it genuinely spans domains, return "
         "several; if one agent covers it, return just that one. The same word can "
         "mean different things to different agents (revenue, sales, customer), so "
-        "match on the domain the question is really about, not on a shared keyword. "
+        "match on the domain the question is really about, not on a shared keyword.\n"
+        "If NO agent's domain covers the question, reply with an empty array []. "
+        "Greetings, small talk, general knowledge and anything these agents hold no "
+        "data for must return []. Do not pick the closest agent as a guess — an "
+        "empty array is the correct answer, and cheaper than a wrong query.\n"
         "Reply with ONLY a JSON array of agent keys from this list, nothing else."
         "\n\n" + catalog
     )
@@ -510,15 +514,18 @@ def classify(state: HaloState) -> dict:
         route = [k for k in json.loads(re.search(r"\[.*\]", raw, re.S).group()) if k in AGENTS]
     except Exception:
         route = []
-    if not route:
+    if not route and llm_status["reason"]:
         # No key, a model error, or unparseable output. Fall back to keywords.
+        # An empty array from a working model is a real answer ("none of these"),
+        # so only fall back when the model actually failed.
         route = keyword_route(state["question"])
         how = "keywords"
-    if not route:
-        route = list(AGENTS)[:1]
-        how = "guess"
+    # An empty route is now a decision, not a failure. Guessing the first agent
+    # meant "hi" spent 14s on a real Fabric call and returned a greeting dressed
+    # up as data.
     why = llm_status["reason"] if how != "model" else ""
-    label = f"classify → route={route} (by {how}{': ' + why if why else ''})"
+    label = (f"classify → route={route} (by {how}{': ' + why if why else ''})" if route
+             else f"classify → no domain covers this (by {how})")
     return {"route": route, "attempts": state.get("attempts", 0), "trace": [label]}
 
 
@@ -645,6 +652,11 @@ def validate(state: HaloState) -> dict:
 # --------------------------------------------------------------------------- #
 # EDGES (routing functions)
 # --------------------------------------------------------------------------- #
+def after_classify(state: HaloState) -> str:
+    """Nothing to ask means nothing to approve. Stop before touching Fabric."""
+    return "gate" if state.get("route") else "out_of_scope"
+
+
 def after_gate(state: HaloState) -> str:
     return "fan_out" if state.get("approved") else "rejected"
 
@@ -655,6 +667,21 @@ def after_validate(state: HaloState) -> str:
 
 def rejected(state: HaloState) -> dict:
     return {"answer": "Request was not approved.", "trace": ["rejected → stopped"]}
+
+
+def out_of_scope(state: HaloState) -> dict:
+    """No configured domain covers the question, so no agent is called at all.
+
+    Says what IS available rather than just refusing, since the usual cause is a
+    question aimed at the right system in the wrong words.
+    """
+    catalog = "\n".join(f"- **{k}** — {v['description']}" for k, v in AGENTS.items())
+    return {
+        "answer": "That question doesn't map to any of the connected data domains, so "
+                  "no data agent was queried.\n\nWhat I can answer from:\n\n" + catalog,
+        "verdict": "pass",
+        "trace": ["out_of_scope → answered without calling any agent"],
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -670,10 +697,13 @@ def build_graph():
     g.add_node("synthesize", instrument("synthesize", synthesize))
     g.add_node("validate", instrument("validate", validate))
     g.add_node("rejected", instrument("rejected", rejected))
+    g.add_node("out_of_scope", instrument("out_of_scope", out_of_scope))
 
     g.add_edge(START, "classify")
-    g.add_edge("classify", "gate")
+    g.add_conditional_edges("classify", after_classify,
+                            {"gate": "gate", "out_of_scope": "out_of_scope"})
     g.add_conditional_edges("gate", after_gate, {"fan_out": "fan_out", "rejected": "rejected"})
+    g.add_edge("out_of_scope", END)
     g.add_edge("fan_out", "synthesize")
     g.add_edge("synthesize", "validate")
     g.add_conditional_edges("validate", after_validate, {"retry": "fan_out", END: END})

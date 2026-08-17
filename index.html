@@ -176,7 +176,10 @@ START → classify → gate → fan_out → synthesize → validate ─┬─ pa
     <ul>
       <li><strong>classify</strong> — picks the agent(s) the question needs. A model reads each
         agent's description and exclusions; if no model is reachable it falls back to keyword
-        matching, and the trace says which fired.</li>
+        matching, and the trace says which fired. It may also pick <em>none</em>: a greeting or
+        an off-topic question stops here, listing what the agents do cover, without spending a
+        query. Guessing the nearest agent instead costs real time and returns a non-answer
+        dressed up as data.</li>
       <li><strong>gate</strong> — optional human approval before any data is touched
         (<code>HALO_HITL=1</code>).</li>
       <li><strong>fan_out</strong> — calls every routed agent concurrently, as you. On a
@@ -354,8 +357,14 @@ function handleEvent(d){
   const retry = d.verdict==="retry";
   if(d.node==="classify"){ route=d.route||[]; setEdge("start>classify","done");
     route.forEach(k=>setEdge("classify>"+vkey(k),"active"));
-    setTraceBody("classify",'<span style="color:var(--muted)">route:</span> '+JSON.stringify(route)
-      + (d.trace&&/by (keywords|guess)/.test(d.trace) ? '<br><span style="color:var(--salmon)">'+esc(d.trace.replace(/^.*?\(/,"(") )+'</span>' : '')); }
+    const degraded = d.trace&&/by keywords/.test(d.trace)
+      ? '<br><span style="color:var(--salmon)">'+esc(d.trace.replace(/^.*?\(/,"("))+'</span>' : '';
+    setTraceBody("classify", route.length
+      ? '<span style="color:var(--muted)">route:</span> '+JSON.stringify(route)+degraded
+      : '<span style="color:var(--salmon)">no domain covers this</span>'
+        +'<br><span style="color:var(--muted)">no agent was called</span>'+degraded); }
+  else if(d.node==="out_of_scope"){ setNode("classify","done"); setNode("answer","done");
+    addTrace("","out-of-scope",'<span style="color:var(--muted)">stopped before querying Fabric</span>'); }
   else if(d.node==="fan_out"){ /* rows already streamed */ }
   else if(d.node==="synthesize"){ setNode("synth","done"); setEdge("synth>validate","active");
     setTraceBody("synthesize",'<span style="color:var(--muted)">merged '+(route.length||1)+' result(s)</span>'); }

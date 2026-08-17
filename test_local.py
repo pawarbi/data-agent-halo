@@ -33,6 +33,10 @@ import halo_core as core
 
 TOKEN = "USER-TOKEN-alice-0001"
 
+# main() swaps core.llm for a stub. Keep the real one so the degraded-model tests
+# can exercise the actual function, which is the only thing that sets llm_status.
+_REAL_LLM = core.llm
+
 
 # --------------------------------------------------------------------------- #
 # A stand-in Fabric Data Agent: one tool taking `question`, bearer required.
@@ -195,6 +199,38 @@ def test_retry() -> None:
     check("retry is bounded", st["verdict"] == "pass")
 
 
+def test_out_of_scope() -> None:
+    """A question no domain covers must not reach Fabric at all.
+
+    Before this, an unroutable question fell back to "first agent", so "hi" spent
+    a real Fabric call and returned a greeting formatted as a data answer.
+    """
+    print("\n[5] questions no agent can answer")
+    calls: list[str] = []
+    real_call = core.call_data_agent
+
+    async def counting_call(token, ws, da, question):
+        calls.append(ws)
+        return await real_call(token, ws, da, question)
+
+    core.call_data_agent = counting_call
+    saved = core.llm
+    # A working model that correctly answers "none of these".
+    core.llm = lambda s, u, temperature=0.0: "[]" if "route a question" in s else '{"verdict":"pass"}'
+    try:
+        st = run_graph("hi", "t-oos")
+        check("no agent was called", calls == [], str(calls))
+        check("route is empty", st.get("route") == [], str(st.get("route")))
+        check("still returns an answer", bool(st.get("answer")))
+        check("the answer says which domains exist",
+              all(k in st["answer"] for k in KEYS), st.get("answer", "")[:120])
+        check("never reached fan_out",
+              not any("fan_out" in t for t in st["trace"]), str(st["trace"]))
+    finally:
+        core.llm = saved
+        core.call_data_agent = real_call
+
+
 def test_keyword_routing() -> None:
     """The no-model fallback. Doubles as a disjointness check on the descriptions.
 
@@ -277,12 +313,26 @@ def test_keyword_routing() -> None:
         print(f"  skip  agent-specific routing cases (configured: {KEYS})")
 
     # classify must say how it routed, so a silent fallback is visible in the trace.
-    saved, core.llm = core.llm, lambda s, u, temperature=0.0: ""
+    #
+    # Simulate the model being unavailable by removing the key and letting the real
+    # llm() run, rather than stubbing it out. classify distinguishes "the model said
+    # none of these" from "the model failed" via llm_status, which only the real
+    # function sets — a stub returning "" would silently take the wrong branch.
+    saved_key, saved_llm = core.LLM_KEY, core.llm
+    core.LLM_KEY, core.llm = "", _REAL_LLM
     try:
-        trace = core.classify({"question": "unroutable gibberish zzz"})["trace"][0]
-        check("classify labels a last-resort guess", "guess" in trace, trace)
+        out = core.classify({"question": "unroutable gibberish zzz"})
+        check("an unroutable question routes nowhere rather than guessing",
+              out["route"] == [], str(out["route"]))
+        check("the trace says no domain covers it", "no domain covers" in out["trace"][0],
+              out["trace"][0])
+        routed = core.classify({"question": f"tell me about {FIRST}"})
+        check("the keyword fallback still routes what it recognises",
+              routed["route"] == [FIRST], str(routed["route"]))
+        check("the trace names the degraded tier", "keywords" in routed["trace"][0],
+              routed["trace"][0])
     finally:
-        core.llm = saved
+        core.LLM_KEY, core.llm = saved_key, saved_llm
 
 
 def test_auth_guard() -> None:
@@ -393,6 +443,7 @@ def main() -> None:
     test_single_route()
     test_parallel()
     test_retry()
+    test_out_of_scope()
     test_keyword_routing()
     test_auth_guard()
     test_sse()

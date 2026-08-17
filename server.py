@@ -43,15 +43,25 @@ def _load_dotenv() -> None:
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
     if not os.path.exists(path):
         return
+    shadowed = []
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, _, value = line.partition("=")
-            key = key.strip()
-            if key and key not in os.environ:
-                os.environ[key] = value.strip().strip("'\"")
+            key, value = key.strip(), value.strip().strip("'\"")
+            if not key:
+                continue
+            if key not in os.environ:
+                os.environ[key] = value
+            elif os.environ[key] != value:
+                shadowed.append(key)
+    if shadowed:
+        # Silent shadowing is nasty: a stale value in the user environment beats the
+        # file you just edited, and the only symptom is a puzzling 401 much later.
+        print(f"[config] ignoring .env for {', '.join(shadowed)} — the environment already "
+              f"sets a different value, and the environment wins here. Unset it to use .env.")
 
 
 _load_dotenv()             # before the config below and before halo_core reads env
