@@ -13,18 +13,18 @@ you know it worked before moving on.
 
 ## Step 1 — reuse the AXIS app registration (you, ~3 min)
 
-Do **not** create a new registration. `your app registration`
-(`77777777-7777-7777-7777-777777777777`) already has `DataAgent.Execute.All`
-consented, and you are an **owner**, so you can change it without an admin.
+Do **not** create a new registration if you already own one with
+`DataAgent.Execute.All` consented. An owner can add a redirect URI without an admin,
+which is the cheap path.
 
-That matters, because a fresh registration would be blocked: you hold Power BI
-Administrator, which does not grant app consent in Entra; this tenant only permits
-self-consent to permissions classified low impact, and Power BI Service has none
-classified. A new app would need a Global Administrator to click through.
+Worth checking before you start: Power BI Administrator does **not** grant app
+consent in Entra. If your tenant also limits self-consent to permissions classified
+low impact, and Power BI Service has none classified, a brand new app registration
+will need a Global Administrator to grant consent before anyone can sign in.
 
-1. entra.microsoft.com → App registrations → **your app registration** →
+1. entra.microsoft.com → App registrations → your app →
    **Authentication** → under Web, **Add URI**: `http://localhost:8000/auth/callback`
-   → **Save**. Leave the existing `.hf.space` URI alone, AXIS still needs it.
+   → **Save**. Leave any existing redirect URIs alone; other apps may need them.
 2. **Certificates & secrets → New client secret** → copy the **Value**, not the Secret
    ID. (The AXIS secret lives in HF's secret store and cannot be read back, so make a
    new one. Multiple secrets on one app are fine.)
@@ -54,7 +54,7 @@ workshop with attendees signing in themselves. It applies to AXIS equally. To fi
 properly a Global Administrator grants tenant-wide consent once:
 
 ```
-https://login.microsoftonline.com/66666666-6666-6666-6666-666666666666/adminconsent?client_id=77777777-7777-7777-7777-777777777777
+https://login.microsoftonline.com/<tenant-id>/adminconsent?client_id=<client-id>
 ```
 
 ## Step 3 — test the redirect flow locally (30 min of debugging saved)
@@ -120,9 +120,9 @@ no `.env`.
 ## Step 7 — the RLS claim
 
 Every data-agent call runs as the signed-in user, so Fabric applies that user's RLS. That
-is true by construction but **not yet demonstrated** — everything so far has run as
-`you@example.com`. To actually show it, have a second user in the tenant sign
-in and ask the same question, and compare.
+is true by construction but **not yet demonstrated** — everything so far has run as a
+single user. To actually show it, have a second user in the tenant sign in and ask the
+same question, then compare.
 
 Until someone does that, describe it as how the system is built rather than as something
 observed.
