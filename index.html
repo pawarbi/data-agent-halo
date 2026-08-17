@@ -32,6 +32,8 @@
   .btn{ font-size:13px; font-weight:600; border-radius:9px; border:1px solid var(--line);
     background:var(--teal); color:#06120f; padding:10px 18px; cursor:pointer; }
   .btn:disabled{ opacity:.4; cursor:default; }
+  .btn.ghost{ background:none; color:var(--muted); font-weight:500; }
+  .btn.ghost:hover{ color:var(--teal); border-color:var(--teal); }
   .chips{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:4px; }
   .chip{ font-size:11.5px; color:var(--muted); background:var(--panel); border:1px solid var(--line);
     border-radius:7px; padding:5px 10px; cursor:pointer; } .chip:hover{ border-color:var(--teal); color:var(--teal); }
@@ -116,6 +118,7 @@
     <input id="q" placeholder="Ask across your data agents…" />
     <select id="model" title="Model used for routing, synthesis and validation"></select>
     <button class="btn" id="run">▶ Run</button>
+    <button class="btn ghost" id="clear" title="Clear the trace, and stop a running query">Clear</button>
   </div>
   <div class="stats" id="stats"></div>
   <div class="main">
@@ -460,7 +463,20 @@ function run(){
     if(d.node==="done"||d.node==="error"){ es.close(); document.getElementById("run").disabled=false; } };
   es.onerror=()=>{ es.close(); stopClock(); document.getElementById("run").disabled=false; };
 }
+// Clear also aborts: closing the EventSource drops the server's response
+// generator, which cancels the graph run rather than leaving it querying Fabric
+// for another minute with nobody listening.
+function clearAll(){
+  if(es){ es.close(); es=null; }
+  clearInterval(ticker); ticker=null; run0=0;
+  clockEl.textContent="";
+  document.getElementById("q").value="";
+  document.getElementById("run").disabled=false;
+  reset();
+  document.getElementById("q").focus();
+}
 document.getElementById("run").addEventListener("click",run);
+document.getElementById("clear").addEventListener("click",clearAll);
 document.getElementById("q").addEventListener("keydown",e=>{ if(e.key==="Enter") run(); });
 const aboutEl=document.getElementById("about");
 document.getElementById("aboutBtn").onclick=()=>aboutEl.classList.add("show");
