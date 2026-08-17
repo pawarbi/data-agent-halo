@@ -1,0 +1,9 @@
+langgraph>=1.0
+mcp>=1.2
+requests>=2.31
+azure-identity>=1.17
+fastapi>=0.110
+uvicorn>=0.27
+msal>=1.28
+itsdangerous>=2.1
+python-multipart>=0.0.9

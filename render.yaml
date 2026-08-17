@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: halo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: HALO_CLIENT_ID
+        sync: false
+      - key: HALO_TENANT
+        sync: false
+      - key: HALO_CLIENT_SECRET
+        sync: false
+      - key: HALO_REDIRECT_URI
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: HALO_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b:free
+      - key: HALO_SESSION_SECRET
+        generateValue: true
+      # One URL per agent — paste the whole MCP endpoint Fabric shows you.
+      # Optional: halo_core.py already has these baked in as defaults.
+      - key: CLOUDMETRICS_URL
+        sync: false
+      - key: MANUFACTURING_URL
+        sync: false
+      - key: ECOMMERCE_URL
+        sync: false
+      # A data agent doing NL->SQL can take a while; the default 300s is usually right.
+      - key: HALO_AGENT_TIMEOUT
+        value: "300"

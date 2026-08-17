@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+or.txt
+*.key
+secrets*
+files.zip
