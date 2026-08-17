@@ -16,6 +16,40 @@ Same as AXIS — a Web app registration in the **Fabric tenant**:
 (You can only fill the exact redirect URI once you know your Render URL — deploy first with a
 placeholder, then update both the Render env var and the Entra redirect URI to match.)
 
+### Test the registration before deploying
+
+The redirect flow is the one part `run_local.py` does not exercise, and it is where
+deploys usually fail. You can test it on your own machine first, which is much faster
+than debugging it on Render:
+
+1. Add a **second** redirect URI to the same app registration:
+   `http://localhost:8000/auth/callback`. Entra allows http for localhost.
+2. Set the four variables and start the real hosted server, not `run_local.py`:
+
+   ```
+   HALO_CLIENT_ID=<app id>
+   HALO_TENANT=<tenant guid>
+   HALO_CLIENT_SECRET=<secret value>
+   HALO_REDIRECT_URI=http://localhost:8000/auth/callback
+   ```
+   ```
+   python server.py
+   ```
+3. Open `http://localhost:8000`, click **Sign in**, and confirm you land back signed in
+   and a question returns data.
+
+If that works, the same registration works on Render once you swap `HALO_REDIRECT_URI`
+and the Entra URI to the `https://<app>.onrender.com` form. Put those four values in
+`.env` rather than your shell if you prefer; `server.py` reads the environment, so
+export them or use `run_local.py`'s loader as a reference.
+
+Common failures, all seen before:
+- `AADSTS50011` — the redirect URI does not match Entra **exactly**, trailing slash included,
+  or `HALO_CLIENT_ID` is wrong (the Azure CLI's own client id will not have your URI).
+- `AADSTS7000215` — invalid secret, usually the secret **ID** pasted instead of its **Value**,
+  or it has expired.
+- Signed in but every agent returns 401 — `DataAgent.Execute.All` is missing admin consent.
+
 ## 2. Push to a Git repo
 
 Needed at runtime: `server.py`, `halo_core.py`, `index.html`, `requirements.txt`,
