@@ -25,7 +25,8 @@ START -> classify -> gate -> fan_out -> synthesize -> validate -+- pass -> END
   the question so it reports what it has instead of inventing a proxy for what it
   does not.
 - **Checks its own work.** A judge can send the whole thing round again with a
-  critique attached. Bounded by `HALO_MAX_RETRIES`.
+  critique attached. Bounded by `HALO_MAX_RETRIES`, and switchable off per question,
+  since a retry means a second full fan-out and that is most of the wall time.
 - **Degrades instead of failing.** No model key means keyword routing,
   concatenated synthesis and auto-pass. The trace says which happened.
 - **Shows the seams.** Cross-domain answers place each domain's figures side by
@@ -48,7 +49,7 @@ DEPLOY_RENDER.md.
 No cloud at all:
 
 ```
-python test_local.py    # 61 checks against throwaway MCP servers
+python test_local.py    # 67 checks against throwaway MCP servers
 python dev_local.py     # the real UI against fake agents, for working on index.html
 ```
 
@@ -59,7 +60,11 @@ a particular deployment lives in the code.
 
 ```json
 {
-  "examples": ["What was OEE by plant?", "Compare orders with production"],
+  "examples": [
+    {"level": "medium", "q": "What was OEE by plant?"},
+    {"level": "hard", "q": "Compare orders with production output"},
+    {"level": "unrelated", "q": "What is the capital of France?"}
+  ],
   "agents": {
     "manufacturing": {
       "url": "https://api.fabric.microsoft.com/v1/mcp/workspaces/<ws-guid>/dataagents/<agent-guid>/agent",
@@ -119,6 +124,7 @@ Fabric is the cheapest way to keep the descriptions true.
 | `HALO_AGENT_TIMEOUT` | seconds to wait on one data agent call. Default 300 |
 | `HALO_SSE_HEARTBEAT` | seconds between keepalive frames. Default 15 |
 | `HALO_HITL` | `1` to require console approval before any data is touched |
+| | The UI can also turn the judge off per question, and pick a model per question |
 | `FABRIC_HOST` | `api.fabric.microsoft.com`, or another Fabric host |
 
 Local runs read a `.env` beside the code. `run_local.py` lets `.env` win over the
@@ -138,17 +144,19 @@ startup when the two disagree.
 | `run_local.py` | real agents, your az CLI identity, no app registration needed |
 | `dev_local.py` | fake agents and a fake user, for UI work |
 | `probe_agents.py` | check the agents answer and print what they expose |
-| `test_local.py` | 61 checks, no cloud |
+| `test_local.py` | 67 checks, no cloud |
 | `NEXT_STEPS.md` | deployment checklist |
 | `DEPLOY_RENDER.md` | hosting on Render |
 | `AGENTS.md` | design notes and the reasoning behind them |
 
 ## Honest limits
 
-- **HALO stitches, it does not join.** Cross-domain answers put each domain's
-  figures side by side. There is no row-level join and no cross-domain
-  arithmetic, by design, because the agents sit over separate models with
-  separate security.
+- **HALO stitches, it does not join.** There is no row-level join across agents,
+  no shared key and no filter applied across domains, because they sit over
+  separate models with separate security. Synthesis may do arithmetic on the
+  figures the agents returned, such as a ratio, but it shows each input, names
+  the domain it came from, and flags the result as indicative when the inputs
+  cover different periods.
 - **Different agents carry different data ranges** and different default periods.
   A combined answer states each period rather than implying a like-for-like
   comparison.

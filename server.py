@@ -216,7 +216,8 @@ def api_models():
 
 
 @app.get("/api/ask")
-async def api_ask(request: Request, q: str, thread: str = "web", model: str = ""):
+async def api_ask(request: Request, q: str, thread: str = "web", model: str = "",
+                  validate: int = 1):
     token = _token_from_session(request)
     if not token:
         return JSONResponse({"error": "not_signed_in"}, status_code=401)
@@ -226,7 +227,8 @@ async def api_ask(request: Request, q: str, thread: str = "web", model: str = ""
         # carries the fine-grained progress the nodes emit while they are still
         # running. Without the second, the UI sits silent for the 30-90s a data
         # agent takes to answer.
-        state_in = {"question": q, "user_token": token, "attempts": 0}
+        state_in = {"question": q, "user_token": token, "attempts": 0,
+                    "skip_validate": not validate}
         if model:
             state_in["model"] = model
         config = {"configurable": {"thread_id": thread}}

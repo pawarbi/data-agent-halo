@@ -28,10 +28,19 @@
     "Delete this _readme key in your own file."
   ],
 
+  "_examples_note": [
+    "Shown in the dropdown on the question box. A plain string works; {level, q} also",
+    "labels how hard it is. Useful levels: medium (one domain), hard (spans domains),",
+    "unrelated (should be refused without calling any agent). Pick ones you have",
+    "actually run, since NL2SQL answers vary between runs."
+  ],
+
   "examples": [
-    "How many orders were placed last month?",
-    "What was OEE by plant?",
-    "Compare order volume with production output"
+    {"level": "medium", "q": "How many orders were placed last month?"},
+    {"level": "medium", "q": "What was OEE by plant?"},
+    {"level": "hard", "q": "Give me a business health check: order volume and plant OEE"},
+    {"level": "hard", "q": "Work out orders per unit produced. Show each input, its domain and its period."},
+    {"level": "unrelated", "q": "What is the capital of France?"}
   ],
 
   "agents": {

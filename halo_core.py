@@ -243,6 +243,7 @@ class HaloState(TypedDict, total=False):
     verdict: str                           # "pass" | "retry"
     critique: str                          # validator feedback for a retry
     attempts: int
+    skip_validate: bool                     # run without the judge
     approved: Optional[bool]               # human-in-the-loop decision
     trace: Annotated[list[str], add]       # human-readable step log
 
@@ -593,9 +594,17 @@ def synthesize(state: HaloState) -> dict:
                "defaults. State the period alongside each figure, and if the periods "
                "differ, say so plainly rather than presenting the numbers as a "
                "like-for-like comparison.\n"
-               "These figures come from separate systems. Report them side by side; do "
-               "not compute ratios or totals across domains, and do not imply a "
-               "row-level join that did not happen.")
+               "If the question asks for a ratio, share or combined figure, you MAY "
+               "compute it from the numbers the agents returned. Show the arithmetic: "
+               "give the inputs, name the domain each came from, then the result. Never "
+               "compute from a figure no agent actually reported.\n"
+               "When the inputs cover different periods, say so on the same line as the "
+               "result and call it indicative rather than a like-for-like measure. A "
+               "ratio across mismatched periods is arithmetic, not a business metric, "
+               "and presenting it as one is the failure mode to avoid.\n"
+               "These figures come from separate systems queried independently. You are "
+               "combining reported values, so never imply a row-level join, a shared key "
+               "or a filter applied across domains, because none happened.")
         answer = llm(sys, f"Question: {state['question']}\n\nResults:\n{blocks}",
                      model=state.get("model")) or blocks
     return {"answer": answer, "trace": [f"synthesize → merged {len(state['results'])} result(s)"]}
@@ -647,6 +656,12 @@ def after_classify(state: HaloState) -> str:
     return "gate" if state.get("route") else "out_of_scope"
 
 
+def after_synthesize(state: HaloState) -> str:
+    """The judge is optional. It costs a model call, and on a retry a second full
+    fan-out, which is most of the wall time on a cross-domain question."""
+    return END if state.get("skip_validate") else "validate"
+
+
 def after_gate(state: HaloState) -> str:
     return "fan_out" if state.get("approved") else "rejected"
 
@@ -695,7 +710,8 @@ def build_graph():
     g.add_conditional_edges("gate", after_gate, {"fan_out": "fan_out", "rejected": "rejected"})
     g.add_edge("out_of_scope", END)
     g.add_edge("fan_out", "synthesize")
-    g.add_edge("synthesize", "validate")
+    g.add_conditional_edges("synthesize", after_synthesize,
+                            {"validate": "validate", END: END})
     g.add_conditional_edges("validate", after_validate, {"retry": "fan_out", END: END})
     g.add_edge("rejected", END)
 

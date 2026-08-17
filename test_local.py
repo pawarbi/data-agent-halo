@@ -231,6 +231,45 @@ def test_out_of_scope() -> None:
         core.call_data_agent = real_call
 
 
+def test_validation_optional() -> None:
+    """The judge can be turned off. It must then not run at all, not just pass."""
+    print("\n[6] validation toggle")
+    judged = {"n": 0}
+    saved = core.llm
+
+    def counting(system, user, temperature=0.0, model=None):
+        # Count judgements but keep fake_llm's behaviour, so the retry path is
+        # still reachable; a stub that always passed would hide it.
+        if "QA judge" in system:
+            judged["n"] += 1
+        return fake_llm(system, user, temperature, model)
+
+    core.llm = counting
+    try:
+        graph = core.build_graph()
+        off = asyncio.run(graph.ainvoke(
+            {"question": "show me downtime", "user_token": TOKEN, "attempts": 0,
+             "skip_validate": True},
+            {"configurable": {"thread_id": "t-noval"}}))
+        check("the judge never runs when off", judged["n"] == 0, f"{judged['n']} judgements")
+        check("an answer still comes back", bool(off.get("answer")))
+        check("no retry, so one fan-out only", off.get("attempts") == 1, str(off.get("attempts")))
+        check("validate left no trace entry",
+              not any("validate" in t for t in off["trace"]), str(off["trace"]))
+
+        # fake_llm asks for a retry on the first "downtime" judgement, so reset its
+        # counter to make the next one the first.
+        judged["n"] = 0
+        _judged["n"] = 0
+        on = asyncio.run(graph.ainvoke(
+            {"question": "show me downtime", "user_token": TOKEN, "attempts": 0},
+            {"configurable": {"thread_id": "t-val"}}))
+        check("the judge runs by default", judged["n"] >= 1, f"{judged['n']} judgements")
+        check("and can still drive a retry", on.get("attempts") == 2, str(on.get("attempts")))
+    finally:
+        core.llm = saved
+
+
 def test_config_and_model_override() -> None:
     """Agents come from config, and a per-run model choice reaches the model call."""
     print("\n[6] configuration")
@@ -520,6 +559,7 @@ def main() -> None:
     test_parallel()
     test_retry()
     test_out_of_scope()
+    test_validation_optional()
     test_config_and_model_override()
     test_keyword_routing()
     test_auth_guard()
