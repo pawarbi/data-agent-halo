@@ -419,6 +419,34 @@ def test_sse() -> None:
     check("parallel wall time beats the serial sum",
           fan["wall_ms"] < fan["serial_ms"], str(fan))
 
+    # A real agent thinks for 30-90s with nothing to report, which is long enough
+    # for a proxy to drop an idle connection. Prove the keepalive frames arrive by
+    # making an agent slow and the heartbeat fast.
+    saved_call, saved_beat = core.call_data_agent, server.HEARTBEAT_SECONDS
+    server.HEARTBEAT_SECONDS = 0.2
+
+    async def slow_call(token, ws, da, question):
+        await asyncio.sleep(1.2)
+        return "slow but fine"
+
+    core.call_data_agent = slow_call
+    try:
+        url = f"http://127.0.0.1:{port}/api/ask?q=slow+one&thread=sse-hb"
+        beats, datas = 0, 0
+        with urllib.request.urlopen(url, timeout=60) as r:
+            check("stream asks proxies not to buffer",
+                  r.headers.get("X-Accel-Buffering") == "no", str(dict(r.headers)))
+            for raw in r:
+                line = raw.decode("utf-8")
+                if line.startswith(":"):
+                    beats += 1
+                elif line.startswith("data: "):
+                    datas += 1
+        check("keepalive frames arrive while an agent is slow", beats >= 2, f"{beats} beats")
+        check("keepalives do not disturb the real events", datas >= 6, f"{datas} data frames")
+    finally:
+        core.call_data_agent, server.HEARTBEAT_SECONDS = saved_call, saved_beat
+
 
 def main() -> None:
     print(f"python {sys.version.split()[0]}")

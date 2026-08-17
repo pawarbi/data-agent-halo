@@ -99,6 +99,10 @@ _flows: dict[str, dict] = {}   # state -> auth-code flow
 # both to Redis together if this ever needs to scale out.
 _caches: dict[str, str] = {}
 
+# How often to send an SSE comment frame while the graph is busy. Must stay well
+# under the shortest idle timeout in front of the app; 15s clears the common 30-60s.
+HEARTBEAT_SECONDS = float(os.environ.get("HALO_SSE_HEARTBEAT", "15"))
+
 
 def _msal(cache: Optional[SerializableTokenCache] = None) -> ConfidentialClientApplication:
     return ConfidentialClientApplication(
@@ -198,42 +202,83 @@ async def api_ask(request: Request, q: str, thread: str = "web"):
         def elapsed_ms() -> int:
             return round((time.perf_counter() - t_start) * 1000)
 
+        def render(mode, chunk) -> list[dict]:
+            """One stream item to zero or more SSE payloads."""
+            nonlocal last_answer
+            if mode == "custom":
+                out = dict(chunk)
+                out["elapsed_ms"] = elapsed_ms()
+                return [out]
+            payloads = []
+            for node, partial in chunk.items():        # {node_name: partial_state}
+                payload = {"node": node, "elapsed_ms": elapsed_ms()}
+                if partial.get("route") is not None:
+                    payload["route"] = partial["route"]
+                if partial.get("results") is not None:
+                    payload["results"] = [
+                        {"agent": r.get("agent"), "preview": (r.get("answer") or "")[:180]}
+                        for r in partial["results"]
+                    ]
+                if partial.get("verdict"):
+                    payload["verdict"] = partial["verdict"]
+                if partial.get("critique"):
+                    payload["critique"] = partial["critique"]
+                if partial.get("answer"):
+                    payload["answer"] = partial["answer"]
+                    last_answer = partial["answer"]
+                if partial.get("trace"):
+                    payload["trace"] = partial["trace"][-1]
+                payloads.append(payload)
+            return payloads
+
+        # The graph is drained by a task feeding a queue, so this generator can wake
+        # on a timer even when the graph has nothing to say. A data agent thinks for
+        # 30-90s in one go, which is long enough for a proxy or load balancer to
+        # decide an idle connection is dead and close it mid-question. Comment
+        # frames keep the connection provably alive; the browser ignores them.
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def produce():
+            try:
+                async for item in _graph.astream(state_in, config,
+                                                 stream_mode=["updates", "custom"]):
+                    await queue.put(("item", item))
+            except Exception as exc:
+                await queue.put(("error", exc))
+            finally:
+                await queue.put(("end", None))
+
+        pump = asyncio.create_task(produce())
         try:
-            async for mode, chunk in _graph.astream(
-                state_in, config, stream_mode=["updates", "custom"]
-            ):
-                if mode == "custom":
-                    chunk = dict(chunk)
-                    chunk["elapsed_ms"] = elapsed_ms()
-                    yield f"data: {json.dumps(chunk)}\n\n"
+            while True:
+                try:
+                    kind, item = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
                     continue
-                update = chunk
-                # update = {node_name: partial_state}
-                for node, partial in update.items():
-                    payload = {"node": node, "elapsed_ms": elapsed_ms()}
-                    if partial.get("route") is not None:
-                        payload["route"] = partial["route"]
-                    if partial.get("results") is not None:
-                        payload["results"] = [
-                            {"agent": r.get("agent"), "preview": (r.get("answer") or "")[:180]}
-                            for r in partial["results"]
-                        ]
-                    if partial.get("verdict"):
-                        payload["verdict"] = partial["verdict"]
-                    if partial.get("critique"):
-                        payload["critique"] = partial["critique"]
-                    if partial.get("answer"):
-                        payload["answer"] = partial["answer"]
-                        last_answer = partial["answer"]
-                    if partial.get("trace"):
-                        payload["trace"] = partial["trace"][-1]
+                if kind == "end":
+                    break
+                if kind == "error":
+                    failed = {"node": "error", "elapsed_ms": elapsed_ms(),
+                              "trace": core.describe_error(item)}
+                    yield f"data: {json.dumps(failed)}\n\n"
+                    return
+                for payload in render(*item):
                     yield f"data: {json.dumps(payload)}\n\n"
             yield (f"data: {json.dumps({'node': 'done', 'answer': last_answer, 'elapsed_ms': elapsed_ms()})}"
                    f"\n\n")
-        except Exception as e:
-            yield f"data: {json.dumps({'node': 'error', 'trace': str(e)})}\n\n"
+        finally:
+            pump.cancel()
 
-    return StreamingResponse(events(), media_type="text/event-stream")
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        # no-cache and no-transform stop well-meaning caches touching the stream;
+        # X-Accel-Buffering is nginx's opt-out, which several PaaS front ends honour.
+        headers={"Cache-Control": "no-cache, no-transform",
+                 "X-Accel-Buffering": "no",
+                 "Connection": "keep-alive"},
+    )
 
 
 @app.get("/api/me")
