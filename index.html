@@ -80,12 +80,12 @@
   svg{ position:absolute; inset:0; width:100%; height:100%; }
   /* The halo: a ring that expands and fades off whichever node is working. */
   .halo{ transform-box:fill-box; transform-origin:center; opacity:0; pointer-events:none; }
-  .halo.on{ animation:halo 1.9s cubic-bezier(.2,.6,.35,1) infinite; }
-  .halo.on[data-ring="1"]{ animation-delay:.95s; }
+  .halo.on{ animation:halo 2.4s cubic-bezier(.25,.6,.4,1) infinite; }
+  .halo.on[data-ring="1"]{ animation-delay:1.2s; }
   @keyframes halo{
-    0%   { transform:scale(1);   opacity:.55; stroke-width:2.5; }
-    70%  { opacity:.06; }
-    100% { transform:scale(2.9); opacity:0;   stroke-width:1; }
+    0%   { transform:scale(1);   opacity:.3;  stroke-width:1.6; }
+    65%  { opacity:.05; }
+    100% { transform:scale(2.1); opacity:0;   stroke-width:.7; }
   }
   @media (prefers-reduced-motion:reduce){ .halo.on{ animation:none; opacity:.35; } }
   .trace{ border:1px solid var(--line); border-radius:14px; background:var(--panel2); display:flex; flex-direction:column; min-height:0; }
@@ -495,7 +495,11 @@ function handleProgress(d){
   }
   else if(d.ev==="node_end"){ setTraceMs(d.node==="fan_out"?"fanout":d.node, d.ms);
     if(d.node in buckets){ buckets[d.node]+=d.ms; renderLatency(); }
-    const vis={classify:"classify",synthesize:"synth",validate:"validate"}[d.node]; if(vis) setNodeMs(vis,d.ms); }
+    // Settle the node the moment it finishes. Waiting until the run ended left
+    // completed nodes pulsing alongside the one actually working. validate is the
+    // exception: its verdict arrives just after, and a retry repaints it salmon.
+    const vis={classify:"classify",synthesize:"synth",validate:"validate"}[d.node];
+    if(vis){ setNodeMs(vis,d.ms); setNode(vis,"done"); } }
   else if(d.ev==="agent_start"){ setNode(vkey(d.agent),"active"); setEdge("classify>"+vkey(d.agent),"active");
     agentMs[d.agent]=null; appendAgentRow(d.agent,'<span class="dots">querying Fabric</span>', d.ask); renderStats(); }
   else if(d.ev==="agent_end"){ setNode(vkey(d.agent),d.failed?"retry":"done"); setNodeMs(vkey(d.agent),d.ms);
