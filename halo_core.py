@@ -178,15 +178,20 @@ AGENTS: dict[str, dict] = {
             "22222222-2222-2222-2222-222222222222/dataagents/"
             "33333333-3333-3333-3333-333333333333/agent",
         ),
-        "Manufacturing operations. Plants, manufacturing lines, machinery and assets, "
-        "production quantity, OEE, scrap rate, production yield, downtime minutes and "
-        "downtime reasons or root causes, and inventory. Also physical product sales: "
-        "units sold, sales revenue, cost and margin from the OpsRefData lakehouse. "
-        "Turbomachinery here covers Pumps and Turbines. Defaults to the latest 30 days "
-        "when no period is given.",
-        excludes="Turbomachinery never includes Motors. No customer-level data, no "
-                 "vendors, purchasing or purchase orders, no employees, and nothing "
-                 "about software subscriptions, seats or support tickets.",
+        "Manufacturing operations. Plants, manufacturing lines, and machinery and assets "
+        "including pumps, turbines and motors. Production quantity, OEE, scrap rate, "
+        "production yield, downtime minutes and downtime reasons or root causes, and "
+        "inventory. Also physical product sales: units sold, sales revenue, cost and "
+        "margin from the OpsRefData lakehouse. Note that the word turbomachinery here "
+        "means pumps and turbines specifically, while motors are covered as ordinary "
+        "assets. Defaults to the latest 30 days when no period is given.",
+        # Deliberately says nothing about motors. Phrasing the turbomachinery
+        # definition as "never includes Motors" read to the classifier as "holds no
+        # motor data", so "which motors had the most downtime?" was refused outright
+        # rather than routed here. A definition is not a scope exclusion.
+        excludes="No customer-level data, no vendors, purchasing or purchase orders, no "
+                 "employees, and nothing about software subscriptions, seats or support "
+                 "tickets.",
     ),
     "ecommerce": agent(
         os.environ.get(
