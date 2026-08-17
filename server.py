@@ -266,6 +266,8 @@ async def api_ask(request: Request, q: str, thread: str = "web", model: str = ""
                     payload["verdict"] = partial["verdict"]
                 if partial.get("critique"):
                     payload["critique"] = partial["critique"]
+                if partial.get("reason"):
+                    payload["reason"] = partial["reason"]
                 if partial.get("answer"):
                     payload["answer"] = partial["answer"]
                     last_answer = partial["answer"]

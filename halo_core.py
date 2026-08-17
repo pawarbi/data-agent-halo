@@ -241,6 +241,7 @@ class HaloState(TypedDict, total=False):
     results: Annotated[list[dict], merge_results]   # [{agent, answer}] — parallel-safe
     answer: str                            # synthesized final answer
     verdict: str                           # "pass" | "retry"
+    reason: str                            # why the judge passed it
     critique: str                          # validator feedback for a retry
     attempts: int
     skip_validate: bool                     # run without the judge
@@ -613,7 +614,9 @@ def synthesize(state: HaloState) -> dict:
 def validate(state: HaloState) -> dict:
     """Judge the answer. Either pass, or request a bounded retry (a real cycle)."""
     if state.get("attempts", 0) > MAX_RETRIES:
-        return {"verdict": "pass", "trace": ["validate → max retries reached, accepting"]}
+        return {"verdict": "pass",
+                "reason": "retry limit reached, accepting the current answer",
+                "trace": ["validate → max retries reached, accepting"]}
     sys = (
         "You are a strict QA judge. Decide if the answer fully and correctly "
         "addresses the question using grounded data.\n"
@@ -629,20 +632,26 @@ def validate(state: HaloState) -> dict:
         "not answered at all, a figure is missing or internally inconsistent, an error "
         "is reported instead of data, or the answer states something the results do not "
         "support.\n"
-        'Reply ONLY as JSON: {"verdict":"pass"} or '
+        "Always say why, in one plain sentence, whether you pass it or not.\n"
+        'Reply ONLY as JSON: {"verdict":"pass","reason":"<why it holds up>"} or '
         '{"verdict":"retry","critique":"<what to fix>"}.'
     )
     raw = llm(sys, f"Question: {state['question']}\n\nAnswer: {state['answer']}",
               model=state.get("model"))
-    verdict, critique = "pass", ""
+    verdict, critique, reason = "pass", "", ""
     try:
         obj = json.loads(re.search(r"\{.*\}", raw, re.S).group())
         verdict = obj.get("verdict", "pass")
         critique = obj.get("critique", "")
+        reason = obj.get("reason", "")
     except Exception:
-        verdict = "pass"  # if the judge is unavailable, don't loop forever
-    out = {"verdict": verdict, "critique": critique,
-           "trace": [f"validate → {verdict}" + (f" ({critique})" if critique else "")]}
+        # No key, or output we could not parse. Passing is the safe default: the
+        # answer is already grounded in what the agents returned, and looping on an
+        # unavailable judge would just burn another fan-out.
+        verdict, reason = "pass", llm_status["reason"] or "judge unavailable, accepted"
+    said = critique if verdict == "retry" else reason
+    out = {"verdict": verdict, "critique": critique, "reason": reason,
+           "trace": [f"validate → {verdict}" + (f" ({said})" if said else "")]}
     if verdict == "retry":
         out["results"] = None   # drop the rejected pass; fan_out starts clean
     return out

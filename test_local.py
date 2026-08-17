@@ -231,6 +231,39 @@ def test_out_of_scope() -> None:
         core.call_data_agent = real_call
 
 
+def test_validate_explains_itself() -> None:
+    """A pass should say why, not just pass. Parsing must stay tolerant."""
+    print("\n[6] the judge explains a pass")
+    saved = core.llm
+    try:
+        core.llm = lambda s, u, temperature=0.0, model=None: (
+            '{"verdict":"pass","reason":"both domains answered and periods are stated"}')
+        out = core.validate({"question": "q", "answer": "a", "attempts": 1})
+        check("a pass carries a reason", out["reason"].startswith("both domains"), str(out))
+        check("the reason reaches the trace", "both domains" in out["trace"][0], out["trace"][0])
+
+        # An older judge that only returns a verdict must still work.
+        core.llm = lambda s, u, temperature=0.0, model=None: '{"verdict":"pass"}'
+        out = core.validate({"question": "q", "answer": "a", "attempts": 1})
+        check("a bare verdict still parses", out["verdict"] == "pass" and out["reason"] == "",
+              str(out))
+
+        # A retry shows the critique, not the reason.
+        core.llm = lambda s, u, temperature=0.0, model=None: (
+            '{"verdict":"retry","critique":"manufacturing was never asked"}')
+        out = core.validate({"question": "q", "answer": "a", "attempts": 1})
+        check("a retry still shows the critique",
+              "never asked" in out["trace"][0], out["trace"][0])
+
+        # Unparseable output must not loop forever, and must say why it passed.
+        core.llm = lambda s, u, temperature=0.0, model=None: "sorry, I cannot do that"
+        out = core.validate({"question": "q", "answer": "a", "attempts": 1})
+        check("unparseable judgement passes and explains itself",
+              out["verdict"] == "pass" and bool(out["reason"]), str(out))
+    finally:
+        core.llm = saved
+
+
 def test_validation_optional() -> None:
     """The judge can be turned off. It must then not run at all, not just pass."""
     print("\n[6] validation toggle")
@@ -559,6 +592,7 @@ def main() -> None:
     test_parallel()
     test_retry()
     test_out_of_scope()
+    test_validate_explains_itself()
     test_validation_optional()
     test_config_and_model_override()
     test_keyword_routing()

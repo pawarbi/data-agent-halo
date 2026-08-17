@@ -467,7 +467,9 @@ function handleEvent(d){
       setTraceBody("validate",'<span style="color:var(--salmon)">retry</span> — '+esc(d.critique||""));
       Object.keys(agentMs).forEach(a=>{const r=document.getElementById("ag_"+a); if(r) r.id="ag_old_"+a;});
       const f=document.getElementById("tr_fanout"); if(f) f.id="tr_fanout_old";
-    } else { setEdge("validate>answer","active"); setTraceBody("validate",'<span style="color:var(--green)">pass</span>'); } }
+    } else { setEdge("validate>answer","active");
+      setTraceBody("validate",'<span style="color:var(--green)">pass</span>'
+        + (d.reason ? ' — <span style="color:var(--muted)">'+esc(d.reason)+'</span>' : '')); } }
   else if(d.node==="done"){ setNode("answer","done"); stopClock();
     if(d.answer){ finalEl.innerHTML='<button class="copy" id="copyBtn">COPY</button><div class="lbl">FINAL ANSWER</div>'+md(d.answer);
       finalEl.classList.add("show");
