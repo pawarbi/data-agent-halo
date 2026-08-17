@@ -322,21 +322,52 @@ def test_sse() -> None:
                     out.append(json.loads(line[6:]))
         return out
 
+    # The stream now interleaves two kinds of event: node completions (which carry
+    # "node") and live progress emitted from inside a running node (which carry "ev").
+    def split(ev):
+        # Progress events also carry "node", so key off "ev" to tell them apart.
+        return ([e["node"] for e in ev if "ev" not in e],
+                [e for e in ev if "ev" in e])
+
     ev = ask("a question only one domain can answer", "sse-a")
-    nodes = [e["node"] for e in ev]
+    nodes, prog = split(ev)
     check("nodes stream in graph order",
           nodes == ["classify", "gate", "fan_out", "synthesize", "validate", "done"], str(nodes))
-    check("route reaches the browser", ev[0]["route"] == [FIRST])
+    routed = next(e for e in ev if "ev" not in e and e.get("node") == "classify")
+    check("route reaches the browser", routed["route"] == [FIRST], str(routed))
     check("final answer is non-empty", bool(ev[-1]["answer"]))
 
+    # Progress events are what keep the UI alive during a 30-90s agent call.
+    kinds = [p["ev"] for p in prog]
+    check("nodes announce themselves before finishing", "node_start" in kinds, str(kinds[:6]))
+    check("agent start and finish both stream",
+          "agent_start" in kinds and "agent_end" in kinds, str(kinds))
+    starts = [p["ev"] for p in prog if p["ev"] in ("node_start", "node_end")]
+    check("a node's start precedes its end", starts[0] == "node_start", str(starts[:4]))
+    ends = [p for p in prog if p["ev"] == "node_end"]
+    check("every node reports a duration", all("ms" in p for p in ends) and len(ends) >= 5,
+          str([(p["node"], p.get("ms")) for p in ends]))
+    check("every event carries elapsed time", all("elapsed_ms" in p for p in prog))
+    fan = [p for p in prog if p["ev"] == "fanout_done"]
+    check("fan-out reports wall vs serial time",
+          bool(fan) and {"wall_ms", "serial_ms", "agents"} <= set(fan[0]), str(fan))
+
     ev = ask("show me downtime", "sse-b")
-    nodes = [e["node"] for e in ev]
+    nodes, prog = split(ev)
     check("retry emits a second fan_out", nodes.count("fan_out") == 2, str(nodes))
     check("critique reaches the browser",
           any(e.get("verdict") == "retry" and e.get("critique") for e in ev))
-    second = [e for e in ev if e["node"] == "fan_out"][1]
+    second = [e for e in ev if "ev" not in e and e.get("node") == "fan_out"][1]
     check("second pass shows one result, not two", len(second["results"]) == 1,
           str(second["results"]))
+
+    ev = ask("compare the two domains", "sse-c")
+    _, prog = split(ev)
+    ends = [p for p in prog if p["ev"] == "agent_end"]
+    check("each agent in a fan-out reports independently", len(ends) == len(KEYS), str(ends))
+    fan = next(p for p in prog if p["ev"] == "fanout_done")
+    check("parallel wall time beats the serial sum",
+          fan["wall_ms"] < fan["serial_ms"], str(fan))
 
 
 def main() -> None:

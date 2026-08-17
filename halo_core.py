@@ -43,8 +43,10 @@ from __future__ import annotations
 import os
 import re
 import json
+import time
 import inspect
 import asyncio
+import functools
 from contextlib import asynccontextmanager
 from typing import TypedDict, Annotated, Optional
 from operator import add
@@ -62,6 +64,49 @@ _CLIENT_TAKES_HEADERS = "headers" in inspect.signature(streamablehttp_client).pa
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.config import get_stream_writer
+
+
+# --------------------------------------------------------------------------- #
+# Progress events.
+#
+# `updates` streaming only reports a node once it has finished, which leaves the
+# UI silent for the 30-90s a data agent takes. These push finer-grained events
+# out of the running graph: node start, per-agent start and finish, and model
+# calls. No-op when nothing is streaming, so the CLI and tests are unaffected.
+# --------------------------------------------------------------------------- #
+def emit(**payload) -> None:
+    try:
+        writer = get_stream_writer()
+    except Exception:
+        return
+    if writer:
+        try:
+            writer(payload)
+        except Exception:
+            pass
+
+
+def instrument(name: str, fn):
+    """Wrap a node so it announces when it starts and how long it took."""
+    if asyncio.iscoroutinefunction(fn):
+        @functools.wraps(fn)
+        async def awrapped(state):
+            emit(ev="node_start", node=name)
+            t0 = time.perf_counter()
+            out = await fn(state)
+            emit(ev="node_end", node=name, ms=round((time.perf_counter() - t0) * 1000))
+            return out
+        return awrapped
+
+    @functools.wraps(fn)
+    def wrapped(state):
+        emit(ev="node_start", node=name)
+        t0 = time.perf_counter()
+        out = fn(state)
+        emit(ev="node_end", node=name, ms=round((time.perf_counter() - t0) * 1000))
+        return out
+    return wrapped
 
 # --------------------------------------------------------------------------- #
 # Configuration — add as many data agents as you have.
@@ -263,7 +308,12 @@ def llm(system: str, user: str, temperature: float = 0.0) -> str:
             llm_status["reason"] = f"rate-limited on model {MODEL} (429)"
             return ""
         r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"].strip()
+        body = r.json()
+        content = body["choices"][0]["message"]["content"].strip()
+        usage = body.get("usage") or {}
+        emit(ev="llm", model=MODEL,
+             prompt_tokens=usage.get("prompt_tokens", 0),
+             completion_tokens=usage.get("completion_tokens", 0))
         llm_status["reason"] = "" if content else "model returned an empty message"
         return content
     except Exception as e:
@@ -511,13 +561,24 @@ async def fan_out(state: HaloState) -> dict:
     async def one(key: str) -> dict:
         cfg = AGENTS[key]
         ask = f"{q}{scope}" if fanning_out else q
+        emit(ev="agent_start", agent=key)
+        t0 = time.perf_counter()
+        failed = False
         try:
             ans = await call_data_agent(token, cfg["workspace_id"], cfg["data_agent_id"], ask)
         except Exception as e:
             ans = f"(error: {describe_error(e)})"
-        return {"agent": key, "answer": ans}
+            failed = True
+        ms = round((time.perf_counter() - t0) * 1000)
+        emit(ev="agent_end", agent=key, ms=ms, failed=failed, preview=ans[:180])
+        return {"agent": key, "answer": ans, "ms": ms}
 
+    t0 = time.perf_counter()
     results = await asyncio.gather(*(one(k) for k in state["route"]))
+    wall = round((time.perf_counter() - t0) * 1000)
+    serial = sum(r["ms"] for r in results)
+    # What the parallelism actually bought. With one agent these are equal.
+    emit(ev="fanout_done", wall_ms=wall, serial_ms=serial, agents=len(results))
     return {"results": list(results),
             "attempts": state.get("attempts", 0) + 1,
             "trace": [f"fan_out → called {state['route']} in parallel"]}
@@ -601,12 +662,14 @@ def rejected(state: HaloState) -> dict:
 # --------------------------------------------------------------------------- #
 def build_graph():
     g = StateGraph(HaloState)
-    g.add_node("classify", classify)
-    g.add_node("gate", gate)
-    g.add_node("fan_out", fan_out)
-    g.add_node("synthesize", synthesize)
-    g.add_node("validate", validate)
-    g.add_node("rejected", rejected)
+    # Wrapped at wiring time rather than by decorating the functions, so the node
+    # functions stay directly callable in tests.
+    g.add_node("classify", instrument("classify", classify))
+    g.add_node("gate", instrument("gate", gate))
+    g.add_node("fan_out", instrument("fan_out", fan_out))
+    g.add_node("synthesize", instrument("synthesize", synthesize))
+    g.add_node("validate", instrument("validate", validate))
+    g.add_node("rejected", instrument("rejected", rejected))
 
     g.add_edge(START, "classify")
     g.add_edge("classify", "gate")

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import json
+import time
 import asyncio
 import secrets as _secrets
 from typing import Optional
@@ -74,6 +75,20 @@ app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, same_site="lax"
 _graph = core.build_graph()
 _flows: dict[str, dict] = {}   # state -> auth-code flow
 
+# sid -> serialized MSAL token cache.
+#
+# The cache CANNOT live in the session cookie. A Fabric access token is a large
+# JWT, and cache also holds a refresh token and an id token; serialized it runs
+# to several KB, past the ~4KB a browser will store. The browser then drops the
+# cookie silently, so sign-in appears to succeed (Entra redirects back happily)
+# and the user lands on the page still signed out, with nothing in any log to
+# say why. The cookie now carries only this opaque id.
+#
+# In-memory, so a restart signs everyone out and it assumes a single worker —
+# the same constraint the graph's MemorySaver checkpointer already has. Move
+# both to Redis together if this ever needs to scale out.
+_caches: dict[str, str] = {}
+
 
 def _msal(cache: Optional[SerializableTokenCache] = None) -> ConfidentialClientApplication:
     return ConfidentialClientApplication(
@@ -113,19 +128,30 @@ def callback(request: Request):
         who = result.get("id_token_claims", {}).get("preferred_username", "")
     except Exception:
         pass
-    request.session["cache"] = cache.serialize()
+    blob = cache.serialize()
+    print(f"[auth] signed in {who}; token cache is {len(blob)} bytes "
+          f"({'too big for a cookie' if len(blob) > 3000 else 'cookie-sized'}), "
+          f"keeping it server-side")
+    sid = _secrets.token_urlsafe(16)
+    _caches[sid] = blob
+    if len(_caches) > 500:                       # crude bound, oldest first
+        for k in list(_caches)[:-500]:
+            _caches.pop(k, None)
+    request.session["sid"] = sid
     request.session["who"] = who
     return RedirectResponse("/")
 
 
 @app.get("/auth/logout")
 def logout(request: Request):
+    _caches.pop(request.session.get("sid", ""), None)
     request.session.clear()
     return RedirectResponse("/")
 
 
 def _token_from_session(request: Request) -> Optional[str]:
-    blob = request.session.get("cache")
+    sid = request.session.get("sid")
+    blob = _caches.get(sid) if sid else None
     if not blob:
         return None
     cache = SerializableTokenCache()
@@ -136,7 +162,7 @@ def _token_from_session(request: Request) -> Optional[str]:
         return None
     res = app_.acquire_token_silent([FABRIC_SCOPE], account=accounts[0])
     if cache.has_state_changed:
-        request.session["cache"] = cache.serialize()
+        _caches[sid] = cache.serialize()
     return res.get("access_token") if res else None
 
 
@@ -150,15 +176,31 @@ async def api_ask(request: Request, q: str, thread: str = "web"):
         return JSONResponse({"error": "not_signed_in"}, status_code=401)
 
     async def events():
-        # emit an event per node as the graph streams state updates
+        # Two streams interleaved: "updates" fires once a node completes, "custom"
+        # carries the fine-grained progress the nodes emit while they are still
+        # running. Without the second, the UI sits silent for the 30-90s a data
+        # agent takes to answer.
         state_in = {"question": q, "user_token": token, "attempts": 0}
         config = {"configurable": {"thread_id": thread}}
         last_answer = ""
+        t_start = time.perf_counter()
+
+        def elapsed_ms() -> int:
+            return round((time.perf_counter() - t_start) * 1000)
+
         try:
-            async for update in _graph.astream(state_in, config, stream_mode="updates"):
+            async for mode, chunk in _graph.astream(
+                state_in, config, stream_mode=["updates", "custom"]
+            ):
+                if mode == "custom":
+                    chunk = dict(chunk)
+                    chunk["elapsed_ms"] = elapsed_ms()
+                    yield f"data: {json.dumps(chunk)}\n\n"
+                    continue
+                update = chunk
                 # update = {node_name: partial_state}
                 for node, partial in update.items():
-                    payload = {"node": node}
+                    payload = {"node": node, "elapsed_ms": elapsed_ms()}
                     if partial.get("route") is not None:
                         payload["route"] = partial["route"]
                     if partial.get("results") is not None:
@@ -176,7 +218,8 @@ async def api_ask(request: Request, q: str, thread: str = "web"):
                     if partial.get("trace"):
                         payload["trace"] = partial["trace"][-1]
                     yield f"data: {json.dumps(payload)}\n\n"
-            yield f"data: {json.dumps({'node': 'done', 'answer': last_answer})}\n\n"
+            yield (f"data: {json.dumps({'node': 'done', 'answer': last_answer, 'elapsed_ms': elapsed_ms()})}"
+                   f"\n\n")
         except Exception as e:
             yield f"data: {json.dumps({'node': 'error', 'trace': str(e)})}\n\n"
 
@@ -185,7 +228,8 @@ async def api_ask(request: Request, q: str, thread: str = "web"):
 
 @app.get("/api/me")
 def me(request: Request):
-    return {"who": request.session.get("who"), "signed_in": bool(request.session.get("cache")),
+    return {"who": request.session.get("who"),
+            "signed_in": request.session.get("sid", "") in _caches,
             "agents": {k: v["description"] for k, v in core.AGENTS.items()}}
 
 

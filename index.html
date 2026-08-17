@@ -15,6 +15,10 @@
   .top{ display:flex; align-items:baseline; gap:14px; margin-bottom:6px; }
   .brand{ font-weight:700; font-size:21px; letter-spacing:.14em; } .brand b{ color:var(--teal); }
   .sub{ font-family:'Cascadia Code',monospace; font-size:11.5px; color:var(--muted); letter-spacing:.05em; }
+  .aboutBtn{ font-family:'Cascadia Code',monospace; font-size:10.5px; letter-spacing:.08em;
+    color:var(--muted); background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    padding:4px 10px; cursor:pointer; }
+  .aboutBtn:hover{ color:var(--teal); border-color:var(--teal); }
   .who{ margin-left:auto; font-family:'Cascadia Code',monospace; font-size:11.5px; color:var(--dim); }
   .who a{ color:var(--teal); text-decoration:none; }
   .askbar{ display:flex; gap:8px; margin:8px 0 4px; }
@@ -27,23 +31,64 @@
   .chips{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:4px; }
   .chip{ font-size:11.5px; color:var(--muted); background:var(--panel); border:1px solid var(--line);
     border-radius:7px; padding:5px 10px; cursor:pointer; } .chip:hover{ border-color:var(--teal); color:var(--teal); }
+  .stats{ display:flex; gap:16px; align-items:center; font-family:'Cascadia Code',monospace;
+    font-size:11px; color:var(--dim); margin:2px 0 2px; min-height:16px; }
+  .stats b{ color:var(--teal); font-weight:500; } .stats .sep{ color:var(--line); }
   .main{ flex:1; display:grid; grid-template-columns:1.15fr 1fr; gap:14px; margin-top:6px; min-height:0; }
   .stage{ position:relative; border:1px solid var(--line); border-radius:14px; background:var(--panel2); overflow:hidden; }
   svg{ position:absolute; inset:0; width:100%; height:100%; }
   .trace{ border:1px solid var(--line); border-radius:14px; background:var(--panel2); display:flex; flex-direction:column; min-height:0; }
-  .traceHead{ padding:11px 16px; border-bottom:1px solid var(--line); font-family:'Cascadia Code',monospace; font-size:11px; letter-spacing:.1em; color:var(--muted); }
+  .traceHead{ padding:11px 16px; border-bottom:1px solid var(--line); font-family:'Cascadia Code',monospace;
+    font-size:11px; letter-spacing:.1em; color:var(--muted); display:flex; align-items:center; }
+  .traceHead .live{ margin-left:auto; color:var(--teal); }
   .log{ flex:1; overflow-y:auto; padding:12px 14px; font-family:'Cascadia Code',monospace; font-size:12px; }
-  .entry{ border-left:2px solid var(--teal); padding:6px 0 10px 12px; margin-bottom:2px; }
+  .entry{ border-left:2px solid var(--teal); padding:6px 0 10px 12px; margin-bottom:2px; position:relative; }
   .entry.done{ border-left-color:var(--green); } .entry.retry{ border-left-color:var(--salmon); } .entry.err{ border-left-color:var(--salmon); }
-  .entry .node{ color:var(--teal); font-weight:500; } .entry .body{ color:var(--text); margin-top:4px; line-height:1.5; white-space:pre-wrap; }
-  .final{ padding:12px 14px; border-top:1px solid var(--line); font-family:'Segoe UI',sans-serif; font-size:13px; line-height:1.5; display:none; }
-  .final.show{ display:block; } .final .lbl{ font-family:'Cascadia Code',monospace; font-size:10px; letter-spacing:.1em; color:var(--green); }
+  .entry .node{ color:var(--teal); font-weight:500; }
+  .entry .ms{ float:right; color:var(--dim); font-size:10.5px; }
+  .entry .body{ color:var(--text); margin-top:4px; line-height:1.5; white-space:pre-wrap; }
+  .entry .agent{ color:var(--blue); }
+  .dots::after{ content:'·'; animation:dots 1.2s steps(4,end) infinite; color:var(--teal); }
+  @keyframes dots{ 0%{content:'·'} 25%{content:'··'} 50%{content:'···'} 75%{content:'····'} }
+  .final{ padding:12px 14px; border-top:1px solid var(--line); font-family:'Segoe UI',sans-serif;
+    font-size:13px; line-height:1.55; display:none; overflow-y:auto; max-height:42%; }
+  .final.show{ display:block; }
+  .final .lbl{ font-family:'Cascadia Code',monospace; font-size:10px; letter-spacing:.1em; color:var(--green); margin-bottom:6px; }
+  .final h3,.final h4{ margin:10px 0 4px; font-size:13px; color:var(--teal); }
+  .final ul{ margin:4px 0; padding-left:18px; } .final li{ margin:2px 0; }
+  .final p{ margin:6px 0; } .final strong{ color:#fff; } .final code{ background:var(--panel); padding:1px 4px; border-radius:3px; }
+  .final .copy{ float:right; font-size:10px; font-family:'Cascadia Code',monospace; color:var(--dim);
+    background:none; border:1px solid var(--line); border-radius:5px; padding:2px 7px; cursor:pointer; }
+  .final .copy:hover{ color:var(--teal); border-color:var(--teal); }
   .gate{ position:fixed; inset:0; background:rgba(8,11,17,.9); display:flex; align-items:center; justify-content:center; z-index:10; }
   .gate .card{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:34px 40px; text-align:center; }
   .gate h1{ font-size:24px; letter-spacing:.12em; margin:0 0 6px; } .gate h1 b{ color:var(--teal); }
   .gate p{ color:var(--muted); font-size:13px; margin:0 0 20px; }
   .legend{ position:absolute; top:12px; right:14px; font-family:'Cascadia Code',monospace; font-size:10px; color:var(--muted); text-align:right; line-height:1.7; }
   .legend span{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-left:6px; }
+  /* About */
+  .modal{ position:fixed; inset:0; background:rgba(6,9,14,.86); z-index:20; display:none;
+    align-items:center; justify-content:center; padding:30px; }
+  .modal.show{ display:flex; }
+  .modal .sheet{ background:var(--panel2); border:1px solid var(--line); border-radius:16px;
+    max-width:1000px; width:100%; max-height:88vh; overflow-y:auto; padding:30px 36px; }
+  .modal h2{ font-size:20px; letter-spacing:.1em; margin:0 0 2px; } .modal h2 b{ color:var(--teal); }
+  .modal .tag{ font-family:'Cascadia Code',monospace; font-size:11px; color:var(--muted); margin-bottom:20px; }
+  .modal h3{ font-size:13px; letter-spacing:.09em; color:var(--teal); font-family:'Cascadia Code',monospace;
+    margin:24px 0 8px; text-transform:uppercase; }
+  .modal p,.modal li{ font-size:13.5px; line-height:1.65; color:#D6DCE6; }
+  .modal ul{ padding-left:18px; margin:6px 0; } .modal li{ margin:5px 0; }
+  .modal strong{ color:#fff; }
+  .modal pre{ background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:14px 16px;
+    font-family:'Cascadia Code',monospace; font-size:11.5px; color:var(--muted); overflow-x:auto; line-height:1.5; }
+  .modal .grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:12px; margin-top:8px; }
+  .modal .card2{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 15px; }
+  .modal .card2 h4{ margin:0 0 5px; font-size:12.5px; color:var(--teal); font-family:'Cascadia Code',monospace; }
+  .modal .card2 p{ margin:0; font-size:12.5px; color:var(--muted); line-height:1.55; }
+  .modal .close{ float:right; background:none; border:1px solid var(--line); color:var(--muted);
+    border-radius:6px; padding:4px 11px; cursor:pointer; font-family:'Cascadia Code',monospace; font-size:11px; }
+  .modal .close:hover{ color:var(--teal); border-color:var(--teal); }
+  .modal .note{ border-left:2px solid var(--salmon); padding-left:12px; color:var(--muted); font-size:12.5px; }
 </style>
 </head>
 <body>
@@ -51,6 +96,7 @@
   <div class="top">
     <div class="brand">HA<b>L</b>O</div>
     <div class="sub">HIERARCHICAL AGENT LOOP ORCHESTRATOR &nbsp;·&nbsp; live</div>
+    <button class="aboutBtn" id="aboutBtn">ABOUT</button>
     <div class="who" id="who"></div>
   </div>
   <div class="chips" id="chips"></div>
@@ -58,6 +104,7 @@
     <input id="q" placeholder="Ask across your data agents…" />
     <button class="btn" id="run">▶ Run</button>
   </div>
+  <div class="stats" id="stats"></div>
   <div class="main">
     <div class="stage">
       <svg id="svg" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
@@ -68,12 +115,13 @@
         <span style="background:var(--idle)"></span> idle</div>
     </div>
     <div class="trace">
-      <div class="traceHead">EXECUTION TRACE</div>
+      <div class="traceHead">EXECUTION TRACE <span class="live" id="liveClock"></span></div>
       <div class="log" id="log"></div>
       <div class="final" id="final"></div>
     </div>
   </div>
 </div>
+
 <div class="gate" id="gate">
   <div class="card">
     <h1>HA<b>L</b>O</h1>
@@ -81,6 +129,101 @@
     <a class="btn" href="/auth/login">Sign in</a>
   </div>
 </div>
+
+<div class="modal" id="about">
+  <div class="sheet">
+    <button class="close" id="aboutClose">CLOSE</button>
+    <h2>HA<b>L</b>O</h2>
+    <div class="tag">Hierarchical Agent Loop Orchestrator</div>
+
+    <p>HALO answers a question by deciding which of your Microsoft Fabric data agents
+    should handle it, asking them <strong>in parallel</strong>, combining what comes back,
+    and then <strong>judging its own answer</strong> — retrying if the answer does not hold up.
+    Every query runs as the signed-in user, so Fabric enforces that person's row-level
+    security. HALO never reads data under a service identity.</p>
+
+    <h3>Where the name comes from</h3>
+    <div class="grid">
+      <div class="card2"><h4>Hierarchical</h4><p>Two levels. An orchestrator on top decides
+        strategy; the domain agents below own the data and the SQL. The orchestrator never
+        touches a table.</p></div>
+      <div class="card2"><h4>Agent</h4><p>Each domain is a published Fabric data agent with
+        its own semantic model, its own definitions, and its own access rules.</p></div>
+      <div class="card2"><h4>Loop</h4><p>The validator is a real cycle, not a formality. A
+        failed answer goes back to fan-out with a critique attached, bounded by
+        MAX_RETRIES.</p></div>
+      <div class="card2"><h4>Orchestrator</h4><p>It routes and stitches. It deliberately does
+        not join across agents — see the limits below.</p></div>
+    </div>
+
+    <h3>Architecture</h3>
+<pre>Browser ──/auth/login──▶ Microsoft (Entra) ──redirect──▶ /auth/callback
+   │                                                          │
+   │  (session cookie holds an id; token cache stays server-side)
+   ▼                                                          ▼
+ index.html ──GET /api/ask (SSE)──▶ server.py ──runs──▶ LangGraph (halo_core.py)
+   ▲                                                          │
+   └────────── streamed trace events, per node ◀──────────────┘
+                                                              │ each fan_out call:
+                                                              ▼
+                                       Fabric Data Agent MCP endpoint (as the user)
+
+START → classify → gate → fan_out → synthesize → validate ─┬─ pass → END
+                    │        ▲                              │
+                 reject      └──────── retry (cycle) ───────┘</pre>
+
+    <h3>What each node does</h3>
+    <ul>
+      <li><strong>classify</strong> — picks the agent(s) the question needs. A model reads each
+        agent's description and exclusions; if no model is reachable it falls back to keyword
+        matching, and the trace says which fired.</li>
+      <li><strong>gate</strong> — optional human approval before any data is touched
+        (<code>HALO_HITL=1</code>).</li>
+      <li><strong>fan_out</strong> — calls every routed agent concurrently, as you. On a
+        multi-agent question each agent is told it owns only part of the question, so it
+        reports what it has rather than substituting a proxy for what it does not.</li>
+      <li><strong>synthesize</strong> — one result passes straight through; several are merged
+        with each domain's figures and time period attributed.</li>
+      <li><strong>validate</strong> — a judge that can send the whole thing round again with a
+        critique folded into the next ask.</li>
+    </ul>
+
+    <h3>What makes it different</h3>
+    <div class="grid">
+      <div class="card2"><h4>vs. one data agent</h4><p>A single agent can only answer within its
+        own model. HALO spans domains that were never designed to be queried together.</p></div>
+      <div class="card2"><h4>vs. managed orchestration</h4><p>The control flow is yours: an
+        explicit classifier, a real retry cycle, a human gate, and checkpointed state you can
+        resume or replay.</p></div>
+      <div class="card2"><h4>Identity, not a service account</h4><p>The user's own token reaches
+        Fabric. RLS, CLS and sensitivity labels apply, and the audit log names a real
+        person.</p></div>
+      <div class="card2"><h4>The trace is the product</h4><p>Routing, per-agent timings, the
+        retry and the judge's reasoning all stream live. You watch it think rather than
+        trusting a black box.</p></div>
+    </div>
+
+    <h3>Features</h3>
+    <ul>
+      <li>Parallel fan-out with per-agent live timing, and what the concurrency actually saved.</li>
+      <li>A bounded self-correction loop driven by an LLM judge.</li>
+      <li>Per-user identity end to end via Entra auth-code sign-in.</li>
+      <li>Any number of agents; the graph on the left lays itself out from the server's list.</li>
+      <li>Degrades instead of failing: no model key means keyword routing, concatenated
+        synthesis and auto-pass, and the trace says so.</li>
+      <li>Checkpointed per-thread state, so a conversation can be resumed or replayed.</li>
+    </ul>
+
+    <h3>Honest limits</h3>
+    <p class="note">HALO <strong>stitches, it does not join</strong>. Cross-domain answers place
+    each domain's figures side by side; there is no row-level join and no cross-domain
+    arithmetic. Agents also carry different data ranges and different default periods, so a
+    combined answer states each period rather than implying a like-for-like comparison. The
+    data agents do the real work — NL to SQL, the semantic model, the security. HALO decides
+    who to ask, and checks the result.</p>
+  </div>
+</div>
+
 <script>
 // Example questions shown as chips. Edit these to suit your agents.
 const EXAMPLES=["How many active subscriptions are there by plan?","What was OEE by plant last month?","Compare subscription growth with production output"];
@@ -104,68 +247,151 @@ function buildLayout(agentKeys){
 buildLayout([]);
 const svg=document.getElementById("svg"), NS="http://www.w3.org/2000/svg";
 const logEl=document.getElementById("log"), finalEl=document.getElementById("final");
-let route=[];
+const statsEl=document.getElementById("stats"), clockEl=document.getElementById("liveClock");
+let route=[], run0=0, ticker=null, tokens=0, llmCalls=0, agentMs={}, fanoutNote="";
+
 function el(t,a){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
 function edgeId(a,b){return a+">"+b;}
 function curve(a,b){const A=N[a],B=N[b];const mx=(A.x+B.x)/2-170,my=(A.y+B.y)/2;return "M "+A.x+" "+A.y+" Q "+mx+" "+my+" "+B.x+" "+B.y;}
 function draw(){ svg.innerHTML="";
   const defs=el("defs"); defs.innerHTML='<filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'; svg.appendChild(defs);
-  svg.appendChild(el("path",{d:curve("validate","synth"),fill:"none",stroke:"var(--idle)","stroke-width":1.5,"stroke-dasharray":"5 6",id:"redge"}));
+  if(N.validate&&N.synth) svg.appendChild(el("path",{d:curve("validate","synth"),fill:"none",stroke:"var(--idle)","stroke-width":1.5,"stroke-dasharray":"5 6",id:"redge"}));
   const rl=el("text",{x:305,y:415,fill:"var(--dim)","font-size":10,"font-family":"Cascadia Code, monospace","text-anchor":"middle"}); rl.textContent="retry ↻"; svg.appendChild(rl);
   E.forEach(p=>{const A=N[p[0]],B=N[p[1]]; svg.appendChild(el("line",{x1:A.x,y1:A.y,x2:B.x,y2:B.y,stroke:"var(--idle)","stroke-width":1.5,id:"e_"+edgeId(p[0],p[1])}));});
   for(const k in N){const n=N[k];const g=el("g",{});
     g.appendChild(el("circle",{cx:n.x,cy:n.y,r:n.r,fill:"var(--panel)",stroke:"var(--idle)","stroke-width":2,id:"c_"+k}));
-    const t=el("text",{x:n.x,y:n.y+n.r+15,fill:"var(--muted)","font-size":n.size||12,"font-family":"Cascadia Code, monospace","text-anchor":"middle",id:"t_"+k}); t.textContent=n.label; g.appendChild(t); svg.appendChild(g);}
+    const t=el("text",{x:n.x,y:n.y+n.r+15,fill:"var(--muted)","font-size":n.size||12,"font-family":"Cascadia Code, monospace","text-anchor":"middle",id:"t_"+k}); t.textContent=n.label; g.appendChild(t); svg.appendChild(g);
+    const d=el("text",{x:n.x,y:n.y+n.r+27,fill:"var(--dim)","font-size":9.5,"font-family":"Cascadia Code, monospace","text-anchor":"middle",id:"d_"+k}); g.appendChild(d);}
 }
 function setNode(k,s){const c=document.getElementById("c_"+k),t=document.getElementById("t_"+k);if(!c)return;
   const m={idle:["var(--panel)","var(--idle)","var(--muted)",""],active:["#0f2b28","var(--teal)","var(--teal)","url(#glow)"],done:["#122417","var(--green)","var(--green)",""],retry:["#2a1712","var(--salmon)","var(--salmon)","url(#glow)"]};
   const a=m[s];c.setAttribute("fill",a[0]);c.setAttribute("stroke",a[1]);c.setAttribute("filter",a[3]);c.setAttribute("r",N[k].r+((s==="active"||s==="retry")?2:0));t.setAttribute("fill",a[2]);}
+function setNodeMs(k,ms){const d=document.getElementById("d_"+k); if(d) d.textContent=ms?fmt(ms):"";}
 function setEdge(id,s){const e=document.getElementById("e_"+id);if(!e)return;const m={idle:["var(--idle)",1.5],active:["var(--teal)",3],done:["var(--green)",2],retry:["var(--salmon)",3]};const a=m[s];e.setAttribute("stroke",a[0]);e.setAttribute("stroke-width",a[1]);}
-function reset(){draw(); for(const k in N)setNode(k,"idle"); logEl.innerHTML=""; finalEl.className="final"; finalEl.innerHTML=""; route=[];}
-function addTrace(cls,node,body){const e=document.createElement("div");e.className="entry "+(cls||"");
-  e.innerHTML='<span class="node">▸ '+node+'</span><div class="body">'+body+'</div>';
-  logEl.querySelectorAll(".entry").forEach(x=>{x.classList.remove("retry");if(!x.classList.contains("err"))x.classList.add("done");});
-  logEl.appendChild(e); logEl.scrollTop=logEl.scrollHeight;}
-function activate(nodeKeys,retry){ // demote others
-  for(const k in N){ /* leave done as-is via edges */ }
-  nodeKeys.forEach(k=>setNode(k,retry?"retry":"active"));
+function fmt(ms){ return ms<1000 ? ms+"ms" : (ms/1000).toFixed(ms<10000?1:0)+"s"; }
+function esc(s){return (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+// Minimal markdown so the agents' bold/bullets/headings render instead of showing as syntax.
+function md(src){
+  const lines=esc(src||"").split(/\r?\n/); let out=[], inList=false;
+  const inline=s=>s.replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
+                   .replace(/`([^`]+)`/g,"<code>$1</code>");
+  for(let raw of lines){
+    const line=raw.trim();
+    const li=line.match(/^[-*•]\s+(.*)$/);
+    if(li){ if(!inList){out.push("<ul>");inList=true;} out.push("<li>"+inline(li[1])+"</li>"); continue; }
+    if(inList){ out.push("</ul>"); inList=false; }
+    if(!line){ continue; }
+    const h=line.match(/^(#{2,4})\s+(.*)$/);
+    if(h){ out.push("<h4>"+inline(h[2])+"</h4>"); continue; }
+    out.push("<p>"+inline(line)+"</p>");
+  }
+  if(inList) out.push("</ul>");
+  return out.join("");
 }
-function esc(s){return (s||"").replace(/</g,"&lt;");}
+
+function reset(){draw(); for(const k in N){setNode(k,"idle");setNodeMs(k,0);}
+  logEl.innerHTML=""; finalEl.className="final"; finalEl.innerHTML="";
+  route=[]; tokens=0; llmCalls=0; agentMs={}; fanoutNote=""; renderStats(); }
+
+function addTrace(cls,node,body,id){const e=document.createElement("div");e.className="entry "+(cls||"");
+  if(id) e.id="tr_"+id;
+  e.innerHTML='<span class="ms" id="ms_'+(id||Math.random().toString(36).slice(2))+'"></span>'
+            + '<span class="node">▸ '+node+'</span><div class="body">'+body+'</div>';
+  logEl.querySelectorAll(".entry").forEach(x=>{x.classList.remove("retry");if(!x.classList.contains("err"))x.classList.add("done");});
+  logEl.appendChild(e); logEl.scrollTop=logEl.scrollHeight; return e;}
+function setTraceBody(id,html){const e=document.getElementById("tr_"+id); if(e) e.querySelector(".body").innerHTML=html;}
+function setTraceMs(id,ms){const e=document.getElementById("ms_"+id); if(e) e.textContent=fmt(ms);}
+function activate(nodeKeys,retry){ nodeKeys.forEach(k=>setNode(k,retry?"retry":"active")); }
+
+function renderStats(){
+  const parts=[];
+  if(run0) parts.push("<b>"+fmt(Date.now()-run0)+"</b> elapsed");
+  if(Object.keys(agentMs).length) parts.push(Object.keys(agentMs).length+" agent call(s)");
+  if(fanoutNote) parts.push(fanoutNote);
+  if(llmCalls) parts.push(llmCalls+" model call(s)"+(tokens?" · "+tokens.toLocaleString()+" tokens":""));
+  statsEl.innerHTML=parts.join(' <span class="sep">|</span> ');
+}
+function startClock(){ run0=Date.now(); clearInterval(ticker);
+  ticker=setInterval(()=>{ clockEl.textContent=fmt(Date.now()-run0); renderStats(); },100); }
+function stopClock(){ clearInterval(ticker); ticker=null; if(run0) clockEl.textContent=fmt(Date.now()-run0); renderStats(); }
+
+// ---- progress events emitted from inside the graph ----
+function handleProgress(d){
+  if(d.ev==="node_start"){
+    const vis={classify:"classify",fan_out:null,synthesize:"synth",validate:"validate",gate:"classify"}[d.node];
+    if(vis) activate([vis]);
+    if(d.node==="fan_out") addTrace("","fan-out",'<span style="color:var(--muted)">dispatching…</span>',"fanout");
+    else if(d.node!=="gate") addTrace("",d.node,'<span class="dots" style="color:var(--muted)">working</span>',d.node);
+  }
+  else if(d.ev==="node_end"){ setTraceMs(d.node==="fan_out"?"fanout":d.node, d.ms);
+    const vis={classify:"classify",synthesize:"synth",validate:"validate"}[d.node]; if(vis) setNodeMs(vis,d.ms); }
+  else if(d.ev==="agent_start"){ setNode(vkey(d.agent),"active"); setEdge("classify>"+vkey(d.agent),"active");
+    agentMs[d.agent]=null; appendAgentRow(d.agent,'<span class="dots">querying Fabric</span>'); renderStats(); }
+  else if(d.ev==="agent_end"){ setNode(vkey(d.agent),d.failed?"retry":"done"); setNodeMs(vkey(d.agent),d.ms);
+    setEdge(vkey(d.agent)+">synth","active"); agentMs[d.agent]=d.ms;
+    updateAgentRow(d.agent,(d.failed?'<span style="color:var(--salmon)">failed</span> ':"")+esc(d.preview||""),d.ms); renderStats(); }
+  else if(d.ev==="fanout_done"){
+    fanoutNote = d.agents>1 ? ("parallel: <b>"+fmt(d.wall_ms)+"</b> vs "+fmt(d.serial_ms)+" sequential") : "";
+    renderStats(); }
+  else if(d.ev==="llm"){ llmCalls++; tokens += (d.prompt_tokens||0)+(d.completion_tokens||0); renderStats(); }
+}
+function appendAgentRow(agent,html){
+  const e=document.getElementById("tr_fanout"); if(!e) return;
+  const b=e.querySelector(".body");
+  if(b.dataset.init!=="1"){ b.innerHTML=""; b.dataset.init="1"; }
+  const row=document.createElement("div"); row.id="ag_"+agent;
+  row.innerHTML='<span class="agent">'+esc(agent)+':</span> <span class="st">'+html+'</span>';
+  b.appendChild(row);
+}
+function updateAgentRow(agent,html,ms){
+  const row=document.getElementById("ag_"+agent); if(!row) return;
+  row.querySelector(".st").innerHTML=html+' <span style="color:var(--dim)">('+fmt(ms)+')</span>';
+}
 
 function handleEvent(d){
+  if(d.ev) return handleProgress(d);
   const retry = d.verdict==="retry";
-  if(d.node==="classify"){ route=d.route||[]; activate(["classify"]); setEdge("start>classify","done");
+  if(d.node==="classify"){ route=d.route||[]; setEdge("start>classify","done");
     route.forEach(k=>setEdge("classify>"+vkey(k),"active"));
-    addTrace("","classify", '<span style="color:var(--muted)">route:</span> '+JSON.stringify(route)); }
-  else if(d.node==="fan_out"){ const vks=route.map(vkey); activate(vks);
-    vks.forEach(k=>setEdge(k+">synth","active"));
-    let b='<span style="color:var(--muted)">calling '+route.length+' agent(s) in parallel · as user</span>';
-    if(d.results) d.results.forEach(r=> b+='\n<span style="color:var(--blue)">'+esc(r.agent)+':</span> '+esc(r.preview));
-    addTrace("","fan-out", b); }
-  else if(d.node==="synthesize"){ activate(["synth"]); setEdge("synth>validate","active");
-    addTrace("","synthesize", '<span style="color:var(--muted)">merged result(s)</span>'); }
-  else if(d.node==="validate"){ activate(["validate"],retry);
+    setTraceBody("classify",'<span style="color:var(--muted)">route:</span> '+JSON.stringify(route)
+      + (d.trace&&/by (keywords|guess)/.test(d.trace) ? '<br><span style="color:var(--salmon)">'+esc(d.trace.replace(/^.*?\(/,"(") )+'</span>' : '')); }
+  else if(d.node==="fan_out"){ /* rows already streamed */ }
+  else if(d.node==="synthesize"){ setNode("synth","done"); setEdge("synth>validate","active");
+    setTraceBody("synthesize",'<span style="color:var(--muted)">merged '+(route.length||1)+' result(s)</span>'); }
+  else if(d.node==="validate"){ setNode("validate",retry?"retry":"done");
     const re=document.getElementById("redge");
-    if(retry){ if(re)re.setAttribute("stroke","var(--salmon)"); addTrace("retry","validate", '<span style="color:var(--salmon)">retry</span> — '+esc(d.critique||"")); }
-    else { setEdge("validate>answer","active"); addTrace("","validate", '<span style="color:var(--green)">pass</span>'); } }
-  else if(d.node==="done"){ setNode("answer","done"); for(const k in N){const c=document.getElementById("c_"+k); if(c&&c.getAttribute("stroke")==="var(--teal)")setNode(k,"done");}
-    if(d.answer){ finalEl.innerHTML='<div class="lbl">FINAL ANSWER</div>'+esc(d.answer); finalEl.classList.add("show"); } }
-  else if(d.node==="error"){ addTrace("err","error", '<span style="color:var(--salmon)">'+esc(d.trace)+'</span>'); }
+    if(retry){ if(re)re.setAttribute("stroke","var(--salmon)");
+      setTraceBody("validate",'<span style="color:var(--salmon)">retry</span> — '+esc(d.critique||""));
+      Object.keys(agentMs).forEach(a=>{const r=document.getElementById("ag_"+a); if(r) r.id="ag_old_"+a;});
+      const f=document.getElementById("tr_fanout"); if(f) f.id="tr_fanout_old";
+    } else { setEdge("validate>answer","active"); setTraceBody("validate",'<span style="color:var(--green)">pass</span>'); } }
+  else if(d.node==="done"){ setNode("answer","done"); stopClock();
+    if(d.answer){ finalEl.innerHTML='<button class="copy" id="copyBtn">COPY</button><div class="lbl">FINAL ANSWER</div>'+md(d.answer);
+      finalEl.classList.add("show");
+      document.getElementById("copyBtn").onclick=()=>{navigator.clipboard.writeText(d.answer);
+        document.getElementById("copyBtn").textContent="COPIED";}; } }
+  else if(d.node==="error"){ addTrace("err","error",'<span style="color:var(--salmon)">'+esc(d.trace)+'</span>'); stopClock(); }
   else if(d.trace){ addTrace("", d.node||"step", esc(d.trace)); }
 }
 
 let es=null;
 function run(){
   const q=document.getElementById("q").value.trim(); if(!q) return;
-  reset(); document.getElementById("run").disabled=true;
+  reset(); startClock(); document.getElementById("run").disabled=true;
   if(es) es.close();
   es=new EventSource("/api/ask?q="+encodeURIComponent(q)+"&thread=web-"+Date.now());
   es.onmessage=(ev)=>{ const d=JSON.parse(ev.data); handleEvent(d);
     if(d.node==="done"||d.node==="error"){ es.close(); document.getElementById("run").disabled=false; } };
-  es.onerror=()=>{ es.close(); document.getElementById("run").disabled=false; };
+  es.onerror=()=>{ es.close(); stopClock(); document.getElementById("run").disabled=false; };
 }
 document.getElementById("run").addEventListener("click",run);
 document.getElementById("q").addEventListener("keydown",e=>{ if(e.key==="Enter") run(); });
+const aboutEl=document.getElementById("about");
+document.getElementById("aboutBtn").onclick=()=>aboutEl.classList.add("show");
+document.getElementById("aboutClose").onclick=()=>aboutEl.classList.remove("show");
+aboutEl.onclick=e=>{ if(e.target===aboutEl) aboutEl.classList.remove("show"); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") aboutEl.classList.remove("show"); });
 
 // boot: check auth, lay the graph out around the agents this server actually has
 fetch("/api/me").then(r=>r.json()).then(m=>{
