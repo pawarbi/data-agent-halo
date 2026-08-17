@@ -11,39 +11,51 @@ you know it worked before moving on.
 - Local app runs against real Fabric as your az CLI identity (`run_local.py`).
 - Git repo initialised. Nothing pushed anywhere yet.
 
-## Step 1 — Entra app registration (you, ~10 min)
+## Step 1 — reuse the AXIS app registration (you, ~3 min)
 
-Azure portal → Microsoft Entra ID → App registrations → **New registration**, in the
-**Fabric tenant**.
+Do **not** create a new registration. `your app registration`
+(`77777777-7777-7777-7777-777777777777`) already has `DataAgent.Execute.All`
+consented, and you are an **owner**, so you can change it without an admin.
 
-1. Name it (HALO). Accounts: **single tenant**. Register.
-2. Copy the **Application (client) ID** and **Directory (tenant) ID** from the overview.
-3. Authentication → Add a platform → **Web** → Redirect URI:
-   `http://localhost:8000/auth/callback` → Configure.
-   (http is allowed for localhost. The Render URI gets added later, in step 5.)
-4. API permissions → Add a permission → APIs my organization uses → **Power BI Service**
-   → Delegated → `DataAgent.Execute.All` → Add → then **Grant admin consent**.
-   The consent step is the one people skip; without it every agent call 401s.
-5. Certificates & secrets → New client secret → copy the **Value**, not the Secret ID.
-   You cannot see it again after leaving the page.
+That matters, because a fresh registration would be blocked: you hold Power BI
+Administrator, which does not grant app consent in Entra; this tenant only permits
+self-consent to permissions classified low impact, and Power BI Service has none
+classified. A new app would need a Global Administrator to click through.
 
-**Check:** you have three things — client id, tenant id, secret value.
+1. entra.microsoft.com → App registrations → **your app registration** →
+   **Authentication** → under Web, **Add URI**: `http://localhost:8000/auth/callback`
+   → **Save**. Leave the existing `.hf.space` URI alone, AXIS still needs it.
+2. **Certificates & secrets → New client secret** → copy the **Value**, not the Secret
+   ID. (The AXIS secret lives in HF's secret store and cannot be read back, so make a
+   new one. Multiple secrets on one app are fine.)
 
-## Step 2 — put them in .env (you, 1 min)
+`HALO_CLIENT_ID`, `HALO_TENANT` and `HALO_REDIRECT_URI` are already filled in `.env`.
 
-Append to `.env` in this folder (already gitignored):
+**Check:** `python -c "import server; print(server.CLIENT_ID, server.REDIRECT_URI)"`
+
+## Step 2 — add the secret to .env (you, 1 min)
+
+Uncomment the last line of `.env` and paste the Value:
 
 ```
-HALO_CLIENT_ID=<application (client) id>
-HALO_TENANT=<directory (tenant) id>
 HALO_CLIENT_SECRET=<the secret Value>
-HALO_REDIRECT_URI=http://localhost:8000/auth/callback
 ```
 
-The client id and tenant id are public identifiers and fine to share. The secret is not.
+**Check:** `python -c "import server; print(bool(server.CLIENT_SECRET))"` prints `True`.
 
-**Check:** `python -c "import server; print(bool(server.CLIENT_ID), server.REDIRECT_URI)"`
-prints `True http://localhost:8000/auth/callback`.
+### Consent is per-user here, not tenant-wide
+
+The existing grant has `consentType: Principal` — it covers **you**, not everyone. There
+is no `AllPrincipals` grant. So a second user signing in will most likely hit "Need admin
+approval" rather than a consent prompt.
+
+That is fine for a single-presenter demo, but it blocks **step 7** (the RLS proof) and any
+workshop with attendees signing in themselves. It applies to AXIS equally. To fix it
+properly a Global Administrator grants tenant-wide consent once:
+
+```
+https://login.microsoftonline.com/66666666-6666-6666-6666-666666666666/adminconsent?client_id=77777777-7777-7777-7777-777777777777
+```
 
 ## Step 3 — test the redirect flow locally (30 min of debugging saved)
 
