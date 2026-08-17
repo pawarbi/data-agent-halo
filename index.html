@@ -73,8 +73,21 @@
   .lat .key i{ display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; }
   .lat .key b{ color:var(--muted); font-weight:500; }
   .main{ flex:1; display:grid; grid-template-columns:1.15fr 1fr; gap:14px; margin-top:6px; min-height:0; }
+  /* Stats and the latency bar sit under the graph they describe, not above everything. */
+  .leftcol{ display:flex; flex-direction:column; min-height:0; gap:6px; }
+  .leftcol .stage{ flex:1; min-height:0; }
   .stage{ position:relative; border:1px solid var(--line); border-radius:14px; background:var(--panel2); overflow:hidden; }
   svg{ position:absolute; inset:0; width:100%; height:100%; }
+  /* The halo: a ring that expands and fades off whichever node is working. */
+  .halo{ transform-box:fill-box; transform-origin:center; opacity:0; pointer-events:none; }
+  .halo.on{ animation:halo 1.9s cubic-bezier(.2,.6,.35,1) infinite; }
+  .halo.on[data-ring="1"]{ animation-delay:.95s; }
+  @keyframes halo{
+    0%   { transform:scale(1);   opacity:.55; stroke-width:2.5; }
+    70%  { opacity:.06; }
+    100% { transform:scale(2.9); opacity:0;   stroke-width:1; }
+  }
+  @media (prefers-reduced-motion:reduce){ .halo.on{ animation:none; opacity:.35; } }
   .trace{ border:1px solid var(--line); border-radius:14px; background:var(--panel2); display:flex; flex-direction:column; min-height:0; }
   .traceHead{ padding:11px 16px; border-bottom:1px solid var(--line); font-family:'Cascadia Code',monospace;
     font-size:11px; letter-spacing:.1em; color:var(--muted); display:flex; align-items:center; }
@@ -164,9 +177,8 @@
     <button class="btn" id="run">▶ Run</button>
     <button class="btn ghost" id="clear" title="Clear the trace, and stop a running query">Clear</button>
   </div>
-  <div class="stats" id="stats"></div>
-  <div class="lat" id="lat"></div>
   <div class="main">
+   <div class="leftcol">
     <div class="stage">
       <svg id="svg" viewBox="0 0 1000 560" preserveAspectRatio="xMidYMid meet"></svg>
       <div class="legend">REASONING PATH
@@ -175,6 +187,9 @@
         <span style="background:var(--salmon)"></span> retry
         <span style="background:var(--idle)"></span> idle</div>
     </div>
+    <div class="stats" id="stats"></div>
+    <div class="lat" id="lat"></div>
+   </div>
     <div class="trace">
       <div class="traceHead">EXECUTION TRACE <span class="live" id="liveClock"></span></div>
       <div class="log" id="log"></div>
@@ -324,6 +339,10 @@ function draw(){ svg.innerHTML="";
   const rl=el("text",{x:305,y:415,fill:"var(--dim)","font-size":12,"font-family":"Cascadia Code, monospace","text-anchor":"middle"}); rl.textContent="retry ↻"; svg.appendChild(rl);
   E.forEach(p=>{const A=N[p[0]],B=N[p[1]]; svg.appendChild(el("line",{x1:A.x,y1:A.y,x2:B.x,y2:B.y,stroke:"var(--idle)","stroke-width":1.5,id:"e_"+edgeId(p[0],p[1])}));});
   for(const k in N){const n=N[k];const g=el("g",{});
+    // Two rings behind the node. Idle they are invisible; active they pulse
+    // outward on a stagger, which is the halo the whole thing is named after.
+    [0,1].forEach(i=>g.appendChild(el("circle",{cx:n.x,cy:n.y,r:n.r,fill:"none",
+      stroke:"var(--teal)","stroke-width":2,"class":"halo","data-ring":i,id:"h"+i+"_"+k})));
     g.appendChild(el("circle",{cx:n.x,cy:n.y,r:n.r,fill:"var(--panel)",stroke:"var(--idle)","stroke-width":2,id:"c_"+k}));
     const t=el("text",{x:n.x,y:n.y+n.r+15,fill:"var(--muted)","font-size":n.size||14,"font-family":"Cascadia Code, monospace","text-anchor":"middle",id:"t_"+k}); t.textContent=n.label; g.appendChild(t); svg.appendChild(g);
     const d=el("text",{x:n.x,y:n.y+n.r+29,fill:"var(--dim)","font-size":11,"font-family":"Cascadia Code, monospace","text-anchor":"middle",id:"d_"+k}); g.appendChild(d);}
@@ -347,7 +366,13 @@ function fitView(){
   const y0=Math.min(...ys)-pad, y1=Math.max(...ys)+pad;
   svg.setAttribute("viewBox", x0+" "+y0+" "+(x1-x0)+" "+(y1-y0));
 }
+function setHalo(k,on,retry){
+  [0,1].forEach(i=>{ const h=document.getElementById("h"+i+"_"+k); if(!h) return;
+    h.setAttribute("stroke", retry?"var(--salmon)":"var(--teal)");
+    h.setAttribute("class", "halo"+(on?" on":"")); });
+}
 function setNode(k,s){const c=document.getElementById("c_"+k),t=document.getElementById("t_"+k);if(!c)return;
+  setHalo(k, s==="active"||s==="retry", s==="retry");
   const m={idle:["var(--panel)","var(--idle)","var(--muted)",""],active:["#0f2b28","var(--teal)","var(--teal)","url(#glow)"],done:["#122417","var(--green)","var(--green)",""],retry:["#2a1712","var(--salmon)","var(--salmon)","url(#glow)"]};
   const a=m[s];c.setAttribute("fill",a[0]);c.setAttribute("stroke",a[1]);c.setAttribute("filter",a[3]);c.setAttribute("r",N[k].r+((s==="active"||s==="retry")?2:0));t.setAttribute("fill",a[2]);}
 function setNodeMs(k,ms){const d=document.getElementById("d_"+k); if(d) d.textContent=ms?fmt(ms):"";}
@@ -526,7 +551,12 @@ function handleEvent(d){
     } else { setEdge("validate>answer","active");
       setTraceBody("validate",'<span style="color:var(--green)">pass</span>'
         + (d.reason ? ' — <span style="color:var(--muted)">'+esc(d.reason)+'</span>' : '')); } }
-  else if(d.node==="done"){ setNode("answer","done"); stopClock();
+  else if(d.node==="done"){
+    // Anything still showing as active has in fact finished; settle it so the
+    // halo stops pulsing on a run that is over.
+    for(const k in N){ const c=document.getElementById("c_"+k);
+      if(c && c.getAttribute("stroke")==="var(--teal)") setNode(k,"done"); }
+    setNode("answer","done"); stopClock();
     if(d.answer){ finalEl.innerHTML='<button class="copy" id="copyBtn">COPY</button><div class="lbl">FINAL ANSWER</div>'+md(d.answer);
       finalEl.classList.add("show");
       document.getElementById("copyBtn").onclick=()=>{navigator.clipboard.writeText(d.answer);
